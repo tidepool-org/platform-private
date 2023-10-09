@@ -27,24 +27,11 @@ func AlertsRoutes() []service.Route {
 func DeleteAlert(dCtx service.Context) {
 	r := dCtx.Request()
 	ctx := r.Context()
-	details := request.DetailsFromContext(ctx)
 	repo := dCtx.AlertsRepository()
 
-	if err := checkAuthentication(details); err != nil {
-		dCtx.RespondWithError(platform.ErrorUnauthorized())
-		return
-	}
-
-	if err := checkUserIDConsistency(details, r); err != nil {
-		dCtx.RespondWithError(platform.ErrorUnauthorized())
-		return
-	}
-
-	followedID := r.PathParam("followedID")
-	userID := userIDWithServiceFallback(details, r.PathParam("userID"))
-	pc := dCtx.PermissionClient()
-	if err := checkUserAuthorization(ctx, pc, userID, followedID); err != nil {
-		dCtx.RespondWithError(platform.ErrorUnauthorized())
+	userID, followedID, perr := checkAlertsPrerequisites(dCtx)
+	if perr != nil {
+		dCtx.RespondWithError(perr)
 		return
 	}
 
@@ -58,24 +45,11 @@ func DeleteAlert(dCtx service.Context) {
 func GetAlert(dCtx service.Context) {
 	r := dCtx.Request()
 	ctx := r.Context()
-	details := request.DetailsFromContext(ctx)
 	repo := dCtx.AlertsRepository()
 
-	if err := checkAuthentication(details); err != nil {
-		dCtx.RespondWithError(platform.ErrorUnauthorized())
-		return
-	}
-
-	followedID := r.PathParam("followedID")
-	userID := userIDWithServiceFallback(details, r.PathParam("userID"))
-	pc := dCtx.PermissionClient()
-	if err := checkUserAuthorization(ctx, pc, userID, followedID); err != nil {
-		dCtx.RespondWithError(platform.ErrorUnauthorized())
-		return
-	}
-
-	if err := checkUserIDConsistency(details, r); err != nil {
-		dCtx.RespondWithError(platform.ErrorUnauthorized())
+	userID, followedID, perr := checkAlertsPrerequisites(dCtx)
+	if perr != nil {
+		dCtx.RespondWithError(perr)
 		return
 	}
 
@@ -98,16 +72,11 @@ func GetAlert(dCtx service.Context) {
 func UpsertAlert(dCtx service.Context) {
 	r := dCtx.Request()
 	ctx := r.Context()
-	details := request.DetailsFromContext(ctx)
 	repo := dCtx.AlertsRepository()
 
-	if err := checkAuthentication(details); err != nil {
-		dCtx.RespondWithError(platform.ErrorUnauthorized())
-		return
-	}
-
-	if err := checkUserIDConsistency(details, r); err != nil {
-		dCtx.RespondWithError(platform.ErrorUnauthorized())
+	userID, followedID, perr := checkAlertsPrerequisites(dCtx)
+	if perr != nil {
+		dCtx.RespondWithError(perr)
 		return
 	}
 
@@ -117,19 +86,37 @@ func UpsertAlert(dCtx service.Context) {
 		return
 	}
 
-	followedID := r.PathParam("followedID")
-	userID := userIDWithServiceFallback(details, r.PathParam("userID"))
-	pc := dCtx.PermissionClient()
-	if err := checkUserAuthorization(ctx, pc, userID, followedID); err != nil {
-		dCtx.RespondWithError(platform.ErrorUnauthorized())
-		return
-	}
-
 	cfg := &alerts.Config{UserID: userID, FollowedID: followedID, Alerts: *a}
 	if err := repo.Upsert(ctx, cfg); err != nil {
 		dCtx.RespondWithError(platform.ErrorInternalServerFailure())
 		return
 	}
+}
+
+// checkAlertsPrerequisites handles HTTP administration tasks.
+//
+// Such as authentication, authorization, and consistency checks.
+func checkAlertsPrerequisites(dCtx service.Context) (string, string, *platform.Error) {
+	r := dCtx.Request()
+	ctx := r.Context()
+	details := request.DetailsFromContext(ctx)
+
+	if err := checkAuthentication(details); err != nil {
+		return "", "", platform.ErrorUnauthorized()
+	}
+
+	followedID := r.PathParam("followedID")
+	userID := userIDWithServiceFallback(details, r.PathParam("userID"))
+	pc := dCtx.PermissionClient()
+	if err := checkUserAuthorization(ctx, pc, userID, followedID); err != nil {
+		return "", "", platform.ErrorUnauthorized()
+	}
+
+	if err := checkUserIDConsistency(details, r); err != nil {
+		return "", "", platform.ErrorUnauthorized()
+	}
+
+	return userID, followedID, nil
 }
 
 var ErrUnauthorized = fmt.Errorf("unauthorized")
