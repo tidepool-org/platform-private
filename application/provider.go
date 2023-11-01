@@ -82,7 +82,8 @@ func NewProvider(prefix string, scopes ...string) (*ProviderImpl, error) {
 		return nil, errors.Wrap(err, "unable to create version reporter")
 	}
 
-	configReporter, err := configEnv.NewReporter(prefix)
+	var configReporter config.Reporter
+	configReporter, err = configEnv.NewReporter(prefix)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to create config reporter")
 	}
