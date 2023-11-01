@@ -52,7 +52,7 @@ var _ = Describe("Reporter", func() {
 	})
 
 	Context("with new config", func() {
-		var reporter config.Reporter
+		var reporter config.RWReporter
 
 		BeforeEach(func() {
 			var err error

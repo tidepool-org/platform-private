@@ -7,12 +7,14 @@ import (
 type Reporter interface {
 	Get(key string) (string, error)
 	GetWithDefault(key string, defaultValue string) string
-
-	Set(key string, value string)
-
-	Delete(key string)
-
 	WithScopes(scopes ...string) Reporter
+}
+
+// RWReporter extends Reporter with read-write methods.
+type RWReporter interface {
+	Reporter
+	Delete(key string)
+	Set(key string, value string)
 }
 
 func SplitTrimCompact(str string) []string {

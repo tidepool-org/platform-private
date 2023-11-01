@@ -20,7 +20,7 @@ func NewDefaultReporter() (config.Reporter, error) {
 	return NewReporter("TIDEPOOL")
 }
 
-func NewReporter(prefix string) (config.Reporter, error) {
+func NewReporter(prefix string) (*reporter, error) {
 	if prefix == "" {
 		return nil, errors.New("prefix is missing")
 	}
