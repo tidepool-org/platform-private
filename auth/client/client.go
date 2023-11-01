@@ -27,7 +27,8 @@ func NewConfig() *Config {
 }
 
 func (c *Config) Load(configReporter config.Reporter) error {
-	if err := c.Config.Load(configReporter); err != nil {
+	loader := platform.NewConfigReporterLoader(configReporter)
+	if err := c.Config.Load(loader); err != nil {
 		return err
 	}
 	return c.ExternalConfig.Load(configReporter.WithScopes("external"))

@@ -245,7 +245,9 @@ func (s *Service) initializeDataSourceClient() error {
 
 	cfg := platform.NewConfig()
 	cfg.UserAgent = s.UserAgent()
-	if err := cfg.Load(s.ConfigReporter().WithScopes("data_source", "client")); err != nil {
+	reporter := s.ConfigReporter().WithScopes("data_source", "client")
+	loader := platform.NewConfigReporterLoader(reporter)
+	if err := cfg.Load(loader); err != nil {
 		return errors.Wrap(err, "unable to load data source client config")
 	}
 
@@ -306,7 +308,9 @@ func (s *Service) initializeTaskClient() error {
 
 	cfg := platform.NewConfig()
 	cfg.UserAgent = s.UserAgent()
-	if err := cfg.Load(s.ConfigReporter().WithScopes("task", "client")); err != nil {
+	reporter := s.ConfigReporter().WithScopes("task", "client")
+	loader := platform.NewConfigReporterLoader(reporter)
+	if err := cfg.Load(loader); err != nil {
 		return errors.Wrap(err, "unable to load task client config")
 	}
 

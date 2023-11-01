@@ -70,7 +70,8 @@ func NewExternalConfig() *ExternalConfig {
 }
 
 func (e *ExternalConfig) Load(configReporter config.Reporter) error {
-	if err := e.Config.Load(configReporter); err != nil {
+	loader := platform.NewConfigReporterLoader(configReporter)
+	if err := e.Config.Load(loader); err != nil {
 		return err
 	}
 
