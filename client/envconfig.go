@@ -1,7 +1,6 @@
 package client
 
 import (
-	"reflect"
 	"regexp"
 	"strings"
 	"sync"
@@ -32,15 +31,14 @@ func (r *envconfigReporter) Get(key string) (string, error) {
 	}
 
 	normalizedKey := normalizeKey(key)
-	v := reflect.Indirect(reflect.ValueOf(r.config))
-	field := v.FieldByNameFunc(func(name string) bool {
-		return normalizeKey(name) == normalizedKey
-	})
-	if field.IsZero() {
-		return "", config.ErrorKeyNotFound(key)
+	switch normalizedKey {
+	case "address":
+		return r.config.Address, nil
+	case "useragent":
+		return r.config.UserAgent, nil
 	}
 
-	return field.String(), nil
+	return "", config.ErrorKeyNotFound(key)
 }
 
 func (r *envconfigReporter) once() error {
