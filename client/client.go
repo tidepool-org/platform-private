@@ -90,6 +90,10 @@ func (c *Client) RequestStreamWithHTTPClient(ctx context.Context, method string,
 
 func (c *Client) RequestDataWithHTTPClient(ctx context.Context, method string, url string, mutators []request.RequestMutator, requestBody interface{}, responseBody interface{}, inspectors []request.ResponseInspector, httpClient *http.Client) error {
 	headerInspector := request.NewHeadersInspector()
+
+	lgr := log.LoggerFromContext(ctx)
+	lgr.Infof("I'm gonna request from this URL %q", url)
+
 	body, err := c.RequestStreamWithHTTPClient(ctx, method, url, mutators, requestBody, append(inspectors, headerInspector), httpClient)
 	if err != nil {
 		return err
