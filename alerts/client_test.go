@@ -2,6 +2,7 @@ package alerts
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 
@@ -15,11 +16,33 @@ import (
 	"github.com/tidepool-org/platform/platform"
 )
 
-const testToken = "auth-me"
+const (
+	testUserID         = "5490432c-f5c0-11ee-9ecf-238bb328e732"
+	testFollowedUserID = "5885590e-f5c0-11ee-93e9-a39df5c4b91e"
+	testToken          = "auth-me"
+)
 
 var _ = Describe("Client", func() {
-	var test404Server, test200Server *httptest.Server
+	var test404Server *httptest.Server
+	var test200Server func(any) *httptest.Server
 	var testAuthServer func(*string) *httptest.Server
+	var testAlertsConfig = &Config{
+		UserID:         testUserID,
+		FollowedUserID: testFollowedUserID,
+		Alerts: Alerts{
+			Low: &LowAlert{
+				Base: Base{
+					Enabled: true,
+					Repeat:  0,
+				},
+				Threshold: Threshold{
+					Value: 10,
+					Units: "mg/dL",
+				},
+				Delay: 0,
+			},
+		},
+	}
 
 	BeforeEach(func() {
 		t := GinkgoT()
@@ -28,9 +51,15 @@ var _ = Describe("Client", func() {
 		test404Server = testServer(t, func(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		})
-		test200Server = testServer(t, func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		})
+		test200Server = func(payload any) *httptest.Server {
+			return testServer(t, func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				if payload != nil {
+					err := json.NewEncoder(w).Encode(payload)
+					Expect(err).ToNot(HaveOccurred())
+				}
+			})
+		}
 		testAuthServer = func(token *string) *httptest.Server {
 			return testServer(t, func(w http.ResponseWriter, r *http.Request) {
 				*token = r.Header.Get(auth.TidepoolSessionTokenHeaderKey)
@@ -48,7 +77,7 @@ var _ = Describe("Client", func() {
 		})
 
 		It("returns nil on success", func() {
-			client, ctx := newAlertsClientTest(test200Server)
+			client, ctx := newAlertsClientTest(test200Server(nil))
 			err := client.Delete(ctx, &Config{})
 			Expect(err).ShouldNot(HaveOccurred())
 		})
@@ -70,7 +99,7 @@ var _ = Describe("Client", func() {
 		})
 
 		It("returns nil on success", func() {
-			client, ctx := newAlertsClientTest(test200Server)
+			client, ctx := newAlertsClientTest(test200Server(nil))
 			err := client.Upsert(ctx, &Config{})
 			Expect(err).ShouldNot(HaveOccurred())
 		})
@@ -79,6 +108,29 @@ var _ = Describe("Client", func() {
 			token := ""
 			client, ctx := newAlertsClientTest(testAuthServer(&token))
 			_ = client.Upsert(ctx, &Config{})
+			Expect(token).To(Equal(testToken))
+		})
+	})
+
+	Context("Get", func() {
+		It("returns an error on non-200 responses", func() {
+			client, ctx := newAlertsClientTest(test404Server)
+			_, err := client.Get(ctx, testFollowedUserID, testUserID)
+			Expect(err).Should(HaveOccurred())
+			Expect(err).To(MatchError(ContainSubstring("resource not found")))
+		})
+
+		It("returns the config on success", func() {
+			client, ctx := newAlertsClientTest(test200Server(testAlertsConfig))
+			cfg, err := client.Get(ctx, testFollowedUserID, testUserID)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(cfg).To(Equal(testAlertsConfig))
+		})
+
+		It("injects an auth token", func() {
+			token := ""
+			client, ctx := newAlertsClientTest(testAuthServer(&token))
+			_, _ = client.Get(ctx, testFollowedUserID, testUserID)
 			Expect(token).To(Equal(testToken))
 		})
 	})

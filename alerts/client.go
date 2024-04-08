@@ -51,12 +51,12 @@ type TokenProvider interface {
 
 // request performs common operations before passing a request off to the
 // underlying platform.Client.
-func (c *Client) request(ctx context.Context, method, url string, body any) error {
+func (c *Client) request(ctx context.Context, method, url string, reqBody, respBody any) error {
 	// Platform's client.Client expects a logger to exist in the request's
 	// context. If it doesn't exist, request processing will panic.
 	loggingCtx := platformlog.NewContextWithLogger(ctx, c.logger)
 	// Make sure the auth token is injected into the request's headers.
-	return c.requestWithAuth(loggingCtx, method, url, body)
+	return c.requestWithAuth(loggingCtx, method, url, reqBody, respBody)
 }
 
 // requestWithAuth injects an auth token before calling platform.Client.RequestData.
@@ -65,24 +65,35 @@ func (c *Client) request(ctx context.Context, method, url string, body any) erro
 // platform.Client. It might be nice to be able to use a mutator, but the auth
 // is specifically handled by the platform.Client via the context field, and
 // if left blank, platform.Client errors.
-func (c *Client) requestWithAuth(ctx context.Context, method, url string, body any) error {
+func (c *Client) requestWithAuth(ctx context.Context, method, url string, reqBody any, respBody any) error {
 	authCtx, err := c.ctxWithAuth(ctx)
 	if err != nil {
 		return err
 	}
-	return c.client.RequestData(authCtx, method, url, nil, body, nil)
+	return c.client.RequestData(authCtx, method, url, nil, reqBody, respBody)
 }
 
 // Upsert updates cfg if it exists or creates it if it doesn't.
 func (c *Client) Upsert(ctx context.Context, cfg *Config) error {
 	url := c.client.ConstructURL("v1", "users", cfg.FollowedUserID, "followers", cfg.UserID, "alerts")
-	return c.request(ctx, http.MethodPost, url, cfg)
+	return c.request(ctx, http.MethodPost, url, cfg, nil)
 }
 
 // Delete the alerts config.
 func (c *Client) Delete(ctx context.Context, cfg *Config) error {
 	url := c.client.ConstructURL("v1", "users", cfg.FollowedUserID, "followers", cfg.UserID, "alerts")
-	return c.request(ctx, http.MethodDelete, url, nil)
+	return c.request(ctx, http.MethodDelete, url, nil, nil)
+}
+
+// Get a user's alert configuration for the followed user.
+func (c *Client) Get(ctx context.Context, followedUserID, userID string) (*Config, error) {
+	url := c.client.ConstructURL("v1", "users", followedUserID, "followers", userID, "alerts")
+	cfg := &Config{}
+	err := c.request(ctx, http.MethodGet, url, nil, cfg)
+	if err != nil {
+		return nil, err
+	}
+	return cfg, nil
 }
 
 // ctxWithAuth injects a server session token into the context.
