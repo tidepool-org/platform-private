@@ -94,6 +94,127 @@ var _ = Describe("Config", func() {
 		Expect(conf.NoCommunication.Delay).To(Equal(DurationMinutes(6 * time.Minute)))
 	})
 
+	Context("Base", func() {
+		Context("MayRepeat", func() {
+			var testRepeat = 5 * time.Minute
+			var base = Base{
+				Repeat: DurationMinutes(testRepeat),
+				Activity: &Activity{
+					Acknowledged: time.Time{},
+					Notified:     time.Time{},
+				},
+			}
+
+			It("allows repetition", func() {
+				Expect(base.MayRepeat()).To(BeTrue())
+				base.Activity.Notified = time.Now().Add(-testRepeat)
+				base.Activity.Acknowledged = time.Now().Add(-testRepeat)
+				Expect(base.MayRepeat()).To(BeTrue())
+			})
+
+			Context("when activity is nil", func() {
+				It("doesn't repeat", func() {
+					base := Base{
+						Repeat: DurationMinutes(testRepeat),
+					}
+					Expect(base.MayRepeat()).To(BeFalse())
+				})
+			})
+
+			It("disallows premature repetition", func() {
+				lessOneSecond := -testRepeat + time.Second
+				base.Activity.Notified = time.Now().Add(lessOneSecond)
+				base.Activity.Acknowledged = time.Now().Add(lessOneSecond)
+				Expect(base.MayRepeat()).To(BeFalse())
+			})
+
+			It("won't repeat when recently acknowledged", func() {
+				lessOneSecond := -testRepeat + time.Second
+				base.Activity.Acknowledged = time.Now().Add(lessOneSecond)
+				Expect(base.MayRepeat()).To(BeFalse())
+			})
+
+			It("won't repeat when recently notified", func() {
+				lessOneSecond := -testRepeat + time.Second
+				base.Activity.Notified = time.Now().Add(lessOneSecond)
+				Expect(base.MayRepeat()).To(BeFalse())
+			})
+
+			It("won't repeat when Repeat is 0", func() {
+				base.Repeat = 0
+				Expect(base.MayRepeat()).To(BeFalse())
+			})
+		})
+
+		Context("Activity", func() {
+			Context("IsActive()", func() {
+				It("is true", func() {
+					triggered := time.Now()
+					resolved := triggered.Add(-time.Nanosecond)
+					a := Activity{
+						Triggered: triggered,
+						Resolved:  resolved,
+					}
+					Expect(a.IsActive()).To(BeTrue())
+				})
+
+				It("is false", func() {
+					triggered := time.Now()
+					resolved := triggered.Add(time.Nanosecond)
+					a := Activity{
+						Triggered: triggered,
+						Resolved:  resolved,
+					}
+					Expect(a.IsActive()).To(BeFalse())
+				})
+			})
+
+			Context("IsAcknowledged()", func() {
+				It("is true", func() {
+					acknowledged := time.Now()
+					notified := acknowledged.Add(-time.Nanosecond)
+					a := Activity{
+						Acknowledged: acknowledged,
+						Notified:     notified,
+					}
+					Expect(a.IsAcknowledged()).To(BeTrue())
+				})
+
+				It("is false", func() {
+					acknowledged := time.Now()
+					notified := acknowledged.Add(time.Nanosecond)
+					a := Activity{
+						Acknowledged: acknowledged,
+						Notified:     notified,
+					}
+					Expect(a.IsAcknowledged()).To(BeFalse())
+				})
+			})
+
+			Context("IsNotified()", func() {
+				It("is true", func() {
+					triggered := time.Now()
+					notified := triggered.Add(time.Nanosecond)
+					a := Activity{
+						Triggered: triggered,
+						Notified:  notified,
+					}
+					Expect(a.IsNotified()).To(BeTrue())
+				})
+
+				It("is false", func() {
+					triggered := time.Now()
+					notified := triggered.Add(-time.Nanosecond)
+					a := Activity{
+						Triggered: triggered,
+						Notified:  notified,
+					}
+					Expect(a.IsNotified()).To(BeFalse())
+				})
+			})
+		})
+	})
+
 	Context("UrgentLowAlert", func() {
 		Context("Threshold", func() {
 			It("accepts values between 0 and 1000 mg/dL", func() {

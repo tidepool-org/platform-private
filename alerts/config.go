@@ -71,6 +71,46 @@ type Base struct {
 	//
 	// A value of 0 (the default) disables repeat notifications.
 	Repeat DurationMinutes `json:"repeat,omitempty" bson:"repeat"`
+
+	// Activity tracks when events related to the alert occurred.
+	*Activity `json:"-" bson:"activity,omitempty"`
+}
+
+func (b Base) MayRepeat() bool {
+	if b.Activity == nil {
+		return false
+	}
+	if b.Repeat == 0 {
+		return false
+	}
+	newest := time.Unix(max(
+		b.Activity.Acknowledged.Unix(),
+		b.Activity.Notified.Unix(),
+	), 0)
+	return time.Since(newest) > b.Repeat.Duration()
+}
+
+type Activity struct {
+	// Acknowledged records the last time this alert was acknowledged.
+	Acknowledged time.Time `json:"acknowledged" bson:"acknowledged"`
+	// Triggered records the last time this alert was triggered.
+	Triggered time.Time `json:"triggered" bson:"triggered"`
+	// Notified records the last time this alert was sent.
+	Notified time.Time `json:"notified" bson:"notified"`
+	// Resolved records the last time this alert was resolved.
+	Resolved time.Time `json:"resolved" bson:"resolved"`
+}
+
+func (a Activity) IsActive() bool {
+	return a.Triggered.After(a.Resolved)
+}
+
+func (a Activity) IsAcknowledged() bool {
+	return a.Acknowledged.After(a.Notified)
+}
+
+func (a Activity) IsNotified() bool {
+	return a.Notified.After(a.Triggered)
 }
 
 func (b Base) Validate(validator structure.Validator) {
