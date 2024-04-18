@@ -45,8 +45,7 @@ func Evaluate(ctx context.Context, client *alerts.Client, followedUserID, userID
 		if err != nil {
 			return err
 		}
-		if changed != nil {
-			config.Alerts.UrgentLow.Activity = changed
+		if changed {
 			if err := client.Upsert(ctx, config); err != nil {
 				return err
 			}
@@ -54,71 +53,67 @@ func Evaluate(ctx context.Context, client *alerts.Client, followedUserID, userID
 		return nil
 	}
 	if config.Alerts.Low != nil && config.Alerts.Low.Enabled {
-		err := evaluateLow(ctx, datum, config.Low)
+		changed, err := evaluateLow(ctx, datum, config.Low)
 		if err != nil {
 			return err
+		}
+		if changed {
+			if err := client.Upsert(ctx, config); err != nil {
+				return err
+			}
 		}
 		return nil
 	}
 	if config.Alerts.High != nil && config.Alerts.High.Enabled {
-		err := evaluateHigh(ctx, datum, config.High)
+		changed, err := evaluateHigh(ctx, datum, config.High)
 		if err != nil {
 			return err
+		}
+		if changed {
+			if err := client.Upsert(ctx, config); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
 
 // evaluateUrgentLow determines if an alert should be sent. It returns an
-// updated Activity if changes should be saved.
-func evaluateUrgentLow(ctx context.Context, datum *glucose.Glucose, alert *alerts.UrgentLowAlert) (_ *alerts.Activity, err error) {
+// updated Activity if changes need to be saved.
+func evaluateUrgentLow(ctx context.Context, datum *glucose.Glucose, alert *alerts.UrgentLowAlert) (_ bool, err error) {
 	if datum.Blood.Units == nil || datum.Blood.Value == nil || datum.Blood.Time == nil {
-		return nil, errors.New("Unable to evaluate datum: Units, Value, or Time is nil")
+		return false, errors.New("Unable to evaluate datum: Units, Value, or Time is nil")
 	}
 	threshold := nontypesglucose.NormalizeValueForUnits(&alert.Threshold.Value, datum.Blood.Units)
 	if threshold == nil {
-		return nil, errors.New("Unable to calculate the alert's normalized threshold")
+		return false, errors.New("Unable to calculate the alert's normalized threshold")
 	}
 
-	active := *datum.Blood.Value < *threshold
-	if !active {
+	alertIsFiring := *datum.Blood.Value < *threshold
+	if !alertIsFiring {
 		alert.Activity.Resolved = time.Now()
-		return alert.Activity, nil
+		return true, nil
 	}
-
-	if alert.IsAcknowledged() || alert.IsNotified() {
-		if alert.MayRepeat() {
-			if err := sendRepeatNotificationUrgentLow(ctx, datum, alert); err != nil {
-				return nil, err
-			}
-			alert.Activity.Notified = time.Now()
-			return alert.Activity, nil
-		}
-		return nil, nil
+	if !alert.IsActive() {
+		alert.Activity.Triggered = time.Now()
 	}
-
-	if err := sendNewNotificationUrgentLow(ctx, datum, alert); err != nil {
-		return nil, err
+	if err := sendNotificationUrgentLow(ctx, datum, alert); err != nil {
+		return false, err
 	}
-	alert.Activity.Triggered = time.Now()
 	alert.Activity.Notified = time.Now()
-	return alert.Activity, nil
+	return true, nil
 }
 
-func sendRepeatNotificationUrgentLow(ctx context.Context, datum *glucose.Glucose, alert *alerts.UrgentLowAlert) error {
+func sendNotificationUrgentLow(ctx context.Context, datum *glucose.Glucose, alert *alerts.UrgentLowAlert) error {
 	return nil
 }
 
-func sendNewNotificationUrgentLow(ctx context.Context, datum *glucose.Glucose, alert *alerts.UrgentLowAlert) error {
-	return nil
+func evaluateLow(ctx context.Context, datum *glucose.Glucose, alert *alerts.LowAlert) (bool, error) {
+	return false, nil
 }
 
-func evaluateLow(ctx context.Context, datum *glucose.Glucose, alert *alerts.LowAlert) error {
-	return nil
-}
-
-func evaluateHigh(ctx context.Context, datum *glucose.Glucose, alert *alerts.HighAlert) error {
-	return nil
+func evaluateHigh(ctx context.Context, datum *glucose.Glucose, alert *alerts.HighAlert) (bool, error) {
+	return false, nil
 }
 
 func evaluateNoCommunication(ctx context.Context, datum *glucose.Glucose, alert *alerts.NoCommunicationAlert) error {

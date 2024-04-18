@@ -33,13 +33,13 @@ var _ = Describe("Client", func() {
 			Low: &LowAlert{
 				Base: Base{
 					Enabled: true,
-					Repeat:  0,
 				},
 				Threshold: Threshold{
 					Value: 10,
 					Units: "mg/dL",
 				},
-				Delay: 0,
+				Delay:  0,
+				Repeat: 0,
 			},
 		},
 	}
