@@ -58,3 +58,13 @@ func (u *userDeletionEventsHandler) HandleDeleteUserEvent(payload ev.DeleteUserE
 	}
 	return nil
 }
+
+type alertsEventsHandler struct {
+	dataStore dataStore.Store
+}
+
+func NewAlertsUpdatedHandler(ctx context.Context, dataStore dataStore.Store) *alertsEventsHandler {
+	return &alertsEventsHandler{
+		dataStore: dataStore,
+	}
+}

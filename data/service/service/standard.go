@@ -2,12 +2,21 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"os"
+	"strings"
+	"sync"
+	"time"
 
 	"github.com/Shopify/sarama"
+
+	"github.com/tidepool-org/go-common/asyncevents"
 	eventsCommon "github.com/tidepool-org/go-common/events"
 
+	stderrors "errors"
+
+	"github.com/tidepool-org/platform/alerts"
 	"github.com/tidepool-org/platform/application"
 	dataDeduplicatorDeduplicator "github.com/tidepool-org/platform/data/deduplicator/deduplicator"
 	dataDeduplicatorFactory "github.com/tidepool-org/platform/data/deduplicator/factory"
@@ -42,6 +51,7 @@ type Standard struct {
 	dataClient                *Client
 	dataSourceClient          *dataSourceServiceClient.Client
 	userEventsHandler         events.Runner
+	alertsEventsHandler       events.Runner
 	api                       *api.Standard
 	server                    *server.Standard
 }
@@ -84,6 +94,9 @@ func (s *Standard) Initialize(provider application.Provider) error {
 	if err := s.initializeUserEventsHandler(); err != nil {
 		return err
 	}
+	// if err := s.initializeAlertsEventsHandler(); err != nil {
+	// 	return err
+	// }
 	if err := s.initializeAPI(); err != nil {
 		return err
 	}
@@ -133,6 +146,9 @@ func (s *Standard) Run() error {
 	errs := make(chan error)
 	go func() {
 		errs <- s.userEventsHandler.Run()
+	}()
+	go func() {
+		errs <- s.alertsEventsHandler.Run()
 	}()
 	go func() {
 		errs <- s.server.Serve()
@@ -389,7 +405,6 @@ func (s *Standard) initializeServer() error {
 func (s *Standard) initializeUserEventsHandler() error {
 	s.Logger().Debug("Initializing user events handler")
 	sarama.Logger = log.New(os.Stdout, "SARAMA ", log.LstdFlags|log.Lshortfile)
-
 	ctx := logInternal.NewContextWithLogger(context.Background(), s.Logger())
 	handler := dataEvents.NewUserDataDeletionHandler(ctx, s.dataStore, s.dataSourceStructuredStore)
 	handlers := []eventsCommon.EventHandler{handler}
@@ -400,4 +415,83 @@ func (s *Standard) initializeUserEventsHandler() error {
 	s.userEventsHandler = runner
 
 	return nil
+}
+
+func (s *Standard) initializeAlertsEventsHandler() error {
+	s.Logger().Debug("Initializing alerts events handler")
+	s.alertsEventsHandler = &SaramaAlertsAdapter{}
+	return nil
+}
+
+type SaramaAlertsAdapter struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+	mu     sync.Mutex
+}
+
+func NewSaramaAlertsAdapter() *SaramaAlertsAdapter {
+	return &SaramaAlertsAdapter{}
+}
+
+func (a *SaramaAlertsAdapter) Run() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	a.mu.Lock()
+	a.ctx = ctx
+	a.cancel = cancel
+	a.mu.Unlock()
+
+	cfg := sarama.NewConfig()
+	consumerGroup, err := sarama.NewConsumerGroup([]string{"addrs"}, "groupID", cfg)
+	if err != nil {
+		return err
+	}
+	alertsConsumer := &alertsEventsConsumer{}
+	retryConsumer := &asyncevents.NTimesRetryingConsumer{
+		Times:    5,
+		Consumer: alertsConsumer,
+	}
+	groupHandler := asyncevents.NewSaramaConsumerGroupHandler(retryConsumer, time.Minute)
+	consumer := asyncevents.NewSaramaEventsConsumer(consumerGroup, groupHandler, "topic")
+	return consumer.Run(ctx)
+}
+
+func (a *SaramaAlertsAdapter) Initialize() error { return nil }
+
+func (a *SaramaAlertsAdapter) Terminate() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.ctx != nil && a.cancel != nil {
+		a.cancel()
+		if err := a.ctx.Err(); err != nil && !stderrors.Is(err, context.Canceled) {
+			return err
+		}
+	}
+
+	return nil
+}
+
+type alertsEventsConsumer struct{}
+
+func (c *alertsEventsConsumer) Consume(ctx context.Context, session sarama.ConsumerGroupSession, msg *sarama.ConsumerMessage) error {
+	// check the msg.Topic
+	if !strings.HasSuffix(msg.Topic, ".data.alerts") {
+		return nil
+	}
+
+	alertsMsg := &alertsMessage{}
+	// this isn't the format of json that I was expecting. It might be mongo's json format? So I might need to figure out a way to convert it, or use some other key modifiers in the connector or something.
+	err := json.Unmarshal(msg.Value, alertsMsg)
+	if err != nil {
+		return err
+	}
+
+	// mark message consumed
+
+	return nil
+}
+
+type alertsMessage struct {
+	FullDocument alerts.Config `json:"fullDocument"`
 }
