@@ -2,6 +2,7 @@ package mongo
 
 import (
 	"context"
+	"os"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -13,6 +14,7 @@ import (
 	"github.com/tidepool-org/platform/data/types/upload"
 	"github.com/tidepool-org/platform/errors"
 	"github.com/tidepool-org/platform/log"
+	"github.com/tidepool-org/platform/log/devlog"
 	"github.com/tidepool-org/platform/page"
 	"github.com/tidepool-org/platform/pointer"
 	storeStructuredMongo "github.com/tidepool-org/platform/store/structured/mongo"
@@ -254,7 +256,10 @@ func (d *DataSetRepository) ListUserDataSets(ctx context.Context, userID string,
 	}
 
 	now := time.Now()
-	logger := log.LoggerFromContext(ctx).WithFields(log.Fields{"userId": userID, "filter": filter, "pagination": pagination})
+	//logger := log.LoggerFromContext(ctx).WithFields(log.Fields{"userId": userID, "filter": filter, "pagination": pagination})
+
+	logger, _ := devlog.New(os.Stderr)
+	logger = logger.WithFields(log.Fields{"userId": userID, "filter": filter, "pagination": pagination})
 
 	dataSets := data.DataSets{}
 	selector := bson.M{
@@ -262,19 +267,21 @@ func (d *DataSetRepository) ListUserDataSets(ctx context.Context, userID string,
 		"_userId": userID,
 		"type":    "upload",
 	}
-	if filter.ClientName != nil {
-		selector["client.name"] = *filter.ClientName
-	}
-	if filter.Deleted == nil || !*filter.Deleted {
-		selector["deletedTime"] = bson.M{"$exists": false}
-	}
-	if filter.DeviceID != nil {
-		selector["deviceId"] = *filter.DeviceID
-	}
-	opts := storeStructuredMongo.FindWithPagination(pagination).
-		SetSort(bson.M{"createdTime": -1})
-	cursor, err := d.Find(ctx, selector, opts)
+	// if filter.ClientName != nil {
+	// 	selector["client.name"] = *filter.ClientName
+	// }
+	// if filter.Deleted == nil || !*filter.Deleted {
+	// 	selector["deletedTime"] = bson.M{"$exists": false}
+	// }
+	// if filter.DeviceID != nil {
+	// 	selector["deviceId"] = *filter.DeviceID
+	// }
+	// opts := storeStructuredMongo.FindWithPagination(pagination).
+	// 	SetSort(bson.M{"createdTime": -1})
+
+	cursor, err := d.Find(ctx, selector, nil)
 	logger.WithFields(log.Fields{"count": len(dataSets), "duration": time.Since(now) / time.Microsecond}).WithError(err).Debug("ListUserDataSets")
+	logger.WithField("cursor size", cursor.RemainingBatchLength()).Debug("debug: size")
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to list user data sets")
 	}
@@ -282,6 +289,7 @@ func (d *DataSetRepository) ListUserDataSets(ctx context.Context, userID string,
 	if err = cursor.All(ctx, &dataSets); err != nil {
 		return nil, errors.Wrap(err, "unable to decode user data sets")
 	}
+	logger.WithFields(log.Fields{"count": len(dataSets), "duration": time.Since(now) / time.Microsecond}).WithError(err).Debug("ListUserDataSets")
 
 	if dataSets == nil {
 		dataSets = data.DataSets{}

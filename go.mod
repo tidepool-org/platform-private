@@ -20,7 +20,7 @@ require (
 	github.com/rinchsan/device-check-go v1.3.0
 	github.com/tidepool-org/clinic/client v0.0.0-20240412011046-bbcf4250e5c4
 	github.com/tidepool-org/devices/api v0.0.0-20240412011010-75b16d8daec0
-	github.com/tidepool-org/go-common v0.12.1
+	github.com/tidepool-org/go-common v0.12.2-0.20240423185608-99e1438de0cc
 	github.com/tidepool-org/hydrophone/client v0.0.0-20240412013722-bff995d59e73
 	github.com/urfave/cli v1.22.14
 	go.mongodb.org/mongo-driver v1.13.1
@@ -158,5 +158,3 @@ replace github.com/gofiber/fiber/v2 v2.49.1 => github.com/gofiber/fiber/v2 v2.52
 
 // Resolve GO-2024-2611
 replace google.golang.org/protobuf v1.32.0 => google.golang.org/protobuf v1.33.0
-
-replace github.com/tidepool-org/go-common => ../go-common

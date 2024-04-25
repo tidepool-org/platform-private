@@ -150,3 +150,18 @@ func (c *NTimesRetryingConsumer) Consume(ctx context.Context,
 func (c *NTimesRetryingConsumer) retryLimitError() error {
 	return fmt.Errorf("%w (%d)", ErrRetriesLimitExceeded, c.Times)
 }
+
+type GiveUpConsumer struct {
+	Consumer SaramaMessageConsumer
+}
+
+func (c *GiveUpConsumer) Consume(ctx context.Context,
+	session sarama.ConsumerGroupSession, message *sarama.ConsumerMessage) error {
+	err := c.Consumer.Consume(ctx, session, message)
+	if err != nil {
+		log.Printf("!!! consumer giving up: %s", err)
+		session.MarkMessage(message, fmt.Sprintf("I have given up after error: %s", err))
+		return err
+	}
+	return nil
+}

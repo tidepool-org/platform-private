@@ -3,6 +3,7 @@ package evalalerts
 import (
 	"context"
 	stdlog "log"
+	"os"
 	"slices"
 	"sort"
 	"time"
@@ -14,9 +15,10 @@ import (
 	"github.com/tidepool-org/platform/data/types/blood/glucose"
 	"github.com/tidepool-org/platform/data/types/blood/glucose/continuous"
 	"github.com/tidepool-org/platform/errors"
+	"github.com/tidepool-org/platform/log/devlog"
 )
 
-func Evaluate(ctx context.Context, client *alerts.Client, followedUserID, userID string) (err error) {
+func Evaluate(ctx context.Context, repo store.DataRepository, client *alerts.Client, followedUserID, userID string) (err error) {
 	config, err := client.Get(ctx, followedUserID, userID)
 	if err != nil {
 		return err
@@ -33,7 +35,8 @@ func Evaluate(ctx context.Context, client *alerts.Client, followedUserID, userID
 		}
 	}
 
-	datum, err := FollowedUsersDatum(ctx, client, nil, config.FollowedUserID)
+	// TODO: need repo!
+	datum, err := FollowedUsersDatum(ctx, client, repo, config.FollowedUserID)
 	if err != nil {
 		return err
 	}
@@ -129,11 +132,14 @@ func FollowedUsersDatum(ctx context.Context, client *alerts.Client, repo store.D
 	// Retrieve the most recent upload only. The intention is for this
 	// function to be triggered for each new update, so only the latest
 	// datapoint needs to be retrieved.
-	since := time.Now().Add(-15 * time.Minute) // TODO: Tune this value
+	since := time.Now().Add(-24 * time.Hour) // TODO: Tune this value
 	status, err := repo.GetLastUpdatedForUser(ctx, userID, continuous.Type, since)
 	if err != nil {
 		return nil, err
 	}
+
+	lgr, _ := devlog.New(os.Stdout)
+	lgr.WithField("userID", userID).WithField("status", status).Debug("GetLastUpdatedForUser")
 
 	cursor, err := repo.GetDataRange(ctx, userID, continuous.Type, status)
 	if err != nil {

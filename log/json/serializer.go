@@ -43,3 +43,7 @@ func (s *serializer) Serialize(fields log.Fields) error {
 
 	return nil
 }
+
+func (s *serializer) SetWriter(w io.Writer) {
+	s.writer = w
+}

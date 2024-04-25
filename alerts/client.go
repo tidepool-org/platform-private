@@ -3,6 +3,7 @@ package alerts
 import (
 	"context"
 	"fmt"
+	stdlog "log"
 	"net/http"
 
 	"github.com/kelseyhightower/envconfig"
@@ -87,6 +88,9 @@ func (c *Client) Delete(ctx context.Context, cfg *Config) error {
 
 // Get a user's alert configuration for the followed user.
 func (c *Client) Get(ctx context.Context, followedUserID, userID string) (*Config, error) {
+	stdlog.Printf("is c nil?! %+v", c)
+	stdlog.Printf("is c.client nil?! %+v", c.client)
+	c.logger.WithField("client", c.client).Warn("here's the client")
 	url := c.client.ConstructURL("v1", "users", followedUserID, "followers", userID, "alerts")
 	cfg := &Config{}
 	err := c.request(ctx, http.MethodGet, url, nil, cfg)

@@ -3,8 +3,11 @@ package v1
 import (
 	"net/http"
 
+	stdlog "log"
+
 	"github.com/tidepool-org/platform/data"
 	dataService "github.com/tidepool-org/platform/data/service"
+	"github.com/tidepool-org/platform/log"
 	"github.com/tidepool-org/platform/page"
 	"github.com/tidepool-org/platform/permission"
 	"github.com/tidepool-org/platform/request"
@@ -23,7 +26,14 @@ func DataSetsRoutes() []dataService.Route {
 func ListUserDataSets(dataServiceContext dataService.Context) {
 	res := dataServiceContext.Response()
 	req := dataServiceContext.Request()
-	dataClient := dataServiceContext.DataClient()
+	dataClient := dataServiceContext.DataRepository()
+
+	lgr := log.LoggerFromContext(req.Context())
+	if lgr != nil {
+		lgr.Warn("INTRO Y U no list data sets?")
+	} else {
+		stdlog.Printf("INTRO Y U no list data sets?")
+	}
 
 	details := request.GetAuthDetails(req.Context())
 	if details == nil {
@@ -73,6 +83,11 @@ func ListUserDataSets(dataServiceContext dataService.Context) {
 		return
 	}
 
+	if lgr != nil {
+		lgr.WithField("dataSets", dataSets).WithField("filter", filter).WithField("pagination", pagination).Warn("Y U no list data sets?")
+	} else {
+		stdlog.Printf("filter: %+v\tpagination: %+v", filter, pagination)
+	}
 	responder.Data(http.StatusOK, dataSets)
 }
 

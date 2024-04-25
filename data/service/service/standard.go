@@ -2,7 +2,7 @@ package service
 
 import (
 	"context"
-	"encoding/json"
+	stderrors "errors"
 	"log"
 	"os"
 	"strings"
@@ -10,12 +10,11 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/kelseyhightower/envconfig"
+	"go.mongodb.org/mongo-driver/bson"
 
 	"github.com/tidepool-org/go-common/asyncevents"
 	eventsCommon "github.com/tidepool-org/go-common/events"
-
-	stderrors "errors"
-
 	"github.com/tidepool-org/platform/alerts"
 	"github.com/tidepool-org/platform/application"
 	dataDeduplicatorDeduplicator "github.com/tidepool-org/platform/data/deduplicator/deduplicator"
@@ -28,8 +27,10 @@ import (
 	dataSourceStoreStructuredMongo "github.com/tidepool-org/platform/data/source/store/structured/mongo"
 	dataStoreMongo "github.com/tidepool-org/platform/data/store/mongo"
 	"github.com/tidepool-org/platform/errors"
+	"github.com/tidepool-org/platform/evalalerts"
 	"github.com/tidepool-org/platform/events"
 	logInternal "github.com/tidepool-org/platform/log"
+	"github.com/tidepool-org/platform/log/devlog"
 	metricClient "github.com/tidepool-org/platform/metric/client"
 	"github.com/tidepool-org/platform/permission"
 	permissionClient "github.com/tidepool-org/platform/permission/client"
@@ -49,6 +50,7 @@ type Standard struct {
 	dataSourceStructuredStore *dataSourceStoreStructuredMongo.Store
 	syncTaskStore             *syncTaskMongo.Store
 	dataClient                *Client
+	alertsClient              *alerts.Client
 	dataSourceClient          *dataSourceServiceClient.Client
 	userEventsHandler         events.Runner
 	alertsEventsHandler       events.Runner
@@ -94,9 +96,9 @@ func (s *Standard) Initialize(provider application.Provider) error {
 	if err := s.initializeUserEventsHandler(); err != nil {
 		return err
 	}
-	// if err := s.initializeAlertsEventsHandler(); err != nil {
-	// 	return err
-	// }
+	if err := s.initializeAlertsEventsHandler(); err != nil {
+		return err
+	}
 	if err := s.initializeAPI(); err != nil {
 		return err
 	}
@@ -117,8 +119,15 @@ func (s *Standard) Terminate() {
 		}
 		s.userEventsHandler = nil
 	}
+	if s.alertsEventsHandler != nil {
+		if err := s.alertsEventsHandler.Terminate(); err != nil {
+			s.Logger().Errorf("Error while terminating the alertsEventsHandler: %v", err)
+		}
+		s.alertsEventsHandler = nil
+	}
 	s.api = nil
 	s.dataClient = nil
+	s.alertsClient = nil
 	if s.syncTaskStore != nil {
 		s.syncTaskStore.Terminate(context.Background())
 		s.syncTaskStore = nil
@@ -419,7 +428,62 @@ func (s *Standard) initializeUserEventsHandler() error {
 
 func (s *Standard) initializeAlertsEventsHandler() error {
 	s.Logger().Debug("Initializing alerts events handler")
-	s.alertsEventsHandler = &SaramaAlertsAdapter{}
+
+	// TODO: dev only, replace with jsonlogger for prod
+	devLogger, err := devlog.New(os.Stderr)
+	if err != nil {
+		return err
+	}
+
+	cfg := platform.NewConfig()
+	cfg.UserAgent = s.UserAgent()
+	reporter := s.ConfigReporter().WithScopes("alerts", "client")
+	loader := platform.NewConfigReporterLoader(reporter)
+	if err := cfg.Load(loader); err != nil {
+		return errors.Wrap(err, "unable to load alerts client config")
+	}
+	pc, err := platform.NewClient(cfg, platform.AuthorizeAsService)
+	if err != nil {
+		return errors.Wrap(err, "unable to create platform client for alerts events handler")
+	} else if pc == nil {
+		return errors.New("unable to create platform client (got nil reponse)")
+	}
+
+	commonCfg := eventsCommon.NewConfig()
+	if err := commonCfg.LoadFromEnv(); err != nil {
+		return err
+	}
+
+	alertsCfg := &AlertsEventsHandlerConfig{}
+	if err := alertsCfg.LoadFromEnv(); err != nil {
+		return err
+	}
+
+	alertsClient := alerts.NewClient(pc, s.AuthClient(), devLogger)
+
+	devLogger.WithField("cfg", alertsCfg).Info("here's the alerts events handler's config")
+	s.alertsEventsHandler = NewSaramaAlertsAdapter(alertsCfg, s.dataStore, alertsClient, commonCfg.SaramaConfig, devLogger)
+	return nil
+}
+
+// AlertsEventsHandlerConfig provides Kafka-specific configuration for the
+// alerts events handlers. Some of the names don't line up perfectly, because
+// where possible, they're shared with other Kafka consumers.
+type AlertsEventsHandlerConfig struct {
+	Topics      []string `envconfig:"KAFKA_ALERTS_TOPICS" required:"true"`
+	GroupID     string   `envconfig:"KAFKA_ALERTS_CONSUMER_GROUP" required:"true"`
+	Brokers     []string `envconfig:"KAFKA_BROKERS" required:"true"`
+	TopicPrefix string   `envconfig:"KAFKA_TOPIC_PREFIX" required:"true"`
+	// Username   string   `envconfig:"KAFKA_USERNAME" required:"true"`
+	// Password   string   `envconfig:"KAFKA_PASSWORD" required:"true"`
+	// RequireSSL bool     `envconfig:"KAFKA_REQUIRE_SSL" required:"true"`
+	// Version    string   `envconfig:"KAFKA_VERSION" required:"true"`
+}
+
+func (c *AlertsEventsHandlerConfig) LoadFromEnv() error {
+	if err := envconfig.Process("", c); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -427,33 +491,61 @@ type SaramaAlertsAdapter struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	mu     sync.Mutex
+
+	AlertsClient *alerts.Client
+	Config       *AlertsEventsHandlerConfig
+	DataStore    *dataStoreMongo.Store
+	SaramaConfig *sarama.Config
+
+	Logger logInternal.Logger
 }
 
-func NewSaramaAlertsAdapter() *SaramaAlertsAdapter {
-	return &SaramaAlertsAdapter{}
+func NewSaramaAlertsAdapter(cfg *AlertsEventsHandlerConfig, dataStore *dataStoreMongo.Store,
+	alertsClient *alerts.Client, saramaCfg *sarama.Config, logger logInternal.Logger,
+) *SaramaAlertsAdapter {
+	return &SaramaAlertsAdapter{
+		AlertsClient: alertsClient,
+		Config:       cfg,
+		DataStore:    dataStore,
+		SaramaConfig: saramaCfg,
+		Logger:       logger,
+	}
 }
 
 func (a *SaramaAlertsAdapter) Run() error {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx := logInternal.NewContextWithLogger(context.Background(), a.Logger)
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	a.mu.Lock()
 	a.ctx = ctx
 	a.cancel = cancel
 	a.mu.Unlock()
 
-	cfg := sarama.NewConfig()
-	consumerGroup, err := sarama.NewConsumerGroup([]string{"addrs"}, "groupID", cfg)
+	consumerGroup, err := sarama.NewConsumerGroup(a.Config.Brokers, a.Config.GroupID, a.SaramaConfig)
 	if err != nil {
 		return err
 	}
-	alertsConsumer := &alertsEventsConsumer{}
+	alertsConsumer := &alertsEventsConsumer{
+		alertsClient: a.AlertsClient,
+		dataStore:    a.DataStore,
+		logger:       a.Logger,
+	}
 	retryConsumer := &asyncevents.NTimesRetryingConsumer{
-		Times:    5,
+		Times:    5, // TODO magic number
 		Consumer: alertsConsumer,
 	}
-	groupHandler := asyncevents.NewSaramaConsumerGroupHandler(retryConsumer, time.Minute)
-	consumer := asyncevents.NewSaramaEventsConsumer(consumerGroup, groupHandler, "topic")
+	giveupConsumer := &asyncevents.GiveUpConsumer{Consumer: retryConsumer} // TODO: only for dev
+	groupHandler := asyncevents.NewSaramaConsumerGroupHandler(giveupConsumer, time.Minute)
+	consumer := asyncevents.NewSaramaEventsConsumer(consumerGroup, groupHandler, a.topics()...)
 	return consumer.Run(ctx)
+}
+
+func (a *SaramaAlertsAdapter) topics() []string {
+	prefixedTopics := make([]string, 0, len(a.Config.Topics))
+	for _, topic := range a.Config.Topics {
+		prefixedTopics = append(prefixedTopics, "default.data."+topic) // TODO magic char
+	}
+	return prefixedTopics
 }
 
 func (a *SaramaAlertsAdapter) Initialize() error { return nil }
@@ -472,22 +564,41 @@ func (a *SaramaAlertsAdapter) Terminate() error {
 	return nil
 }
 
-type alertsEventsConsumer struct{}
+type alertsEventsConsumer struct {
+	logger       logInternal.Logger
+	alertsClient *alerts.Client
+	dataStore    *dataStoreMongo.Store
+}
 
-func (c *alertsEventsConsumer) Consume(ctx context.Context, session sarama.ConsumerGroupSession, msg *sarama.ConsumerMessage) error {
-	// check the msg.Topic
-	if !strings.HasSuffix(msg.Topic, ".data.alerts") {
+func (c *alertsEventsConsumer) Consume(ctx context.Context,
+	session sarama.ConsumerGroupSession, msg *sarama.ConsumerMessage) (err error) {
+
+	if msg == nil {
+		c.logger.Info("received nil msg, will return nil")
 		return nil
 	}
 
-	alertsMsg := &alertsMessage{}
-	// this isn't the format of json that I was expecting. It might be mongo's json format? So I might need to figure out a way to convert it, or use some other key modifiers in the connector or something.
-	err := json.Unmarshal(msg.Value, alertsMsg)
+	if !strings.HasSuffix(msg.Topic, ".data.alerts") && !strings.HasSuffix(msg.Topic, ".data.deviceData.alerts") {
+		c.logger.Infof("skipping message (wrong topic) %s", msg.Topic)
+		return nil
+	}
+
+	am := &alertsMessage{}
+	err = bson.UnmarshalExtJSON(msg.Value, false, am)
+	if err != nil {
+		return err
+	}
+	cfg := am.FullDocument
+	c.logger.WithField("cfg", cfg).Debug("consuming an alerts message")
+
+	dataRepo := c.dataStore.NewDataRepository()
+	// TODO: pass it off to the evaulator
+	err = evalalerts.Evaluate(ctx, dataRepo, c.alertsClient, cfg.FollowedUserID, cfg.UserID)
 	if err != nil {
 		return err
 	}
 
-	// mark message consumed
+	// TODO: mark message consumed
 
 	return nil
 }

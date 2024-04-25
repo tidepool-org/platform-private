@@ -5,6 +5,7 @@ import (
 
 	dataService "github.com/tidepool-org/platform/data/service"
 	dataStore "github.com/tidepool-org/platform/data/store"
+	"github.com/tidepool-org/platform/log"
 	"github.com/tidepool-org/platform/page"
 	"github.com/tidepool-org/platform/permission"
 	"github.com/tidepool-org/platform/request"
@@ -13,6 +14,9 @@ import (
 
 func UsersDataSetsGet(dataServiceContext dataService.Context) {
 	ctx := dataServiceContext.Request().Context()
+	if lgr := log.LoggerFromContext(ctx); lgr != nil {
+		lgr.Info("!!!UsersDataSetsGet!!!")
+	}
 
 	targetUserID := dataServiceContext.Request().PathParam("userId")
 	if targetUserID == "" {

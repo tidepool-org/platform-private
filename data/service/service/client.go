@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"log"
 
 	"github.com/tidepool-org/platform/data"
 	dataStore "github.com/tidepool-org/platform/data/store"
@@ -30,6 +31,7 @@ func (c *Client) CreateUserDataSet(ctx context.Context, userID string, create *d
 
 func (c *Client) ListUserDataSets(ctx context.Context, userID string, filter *data.DataSetFilter, pagination *page.Pagination) (data.DataSets, error) {
 	repository := c.dataStore.NewDataRepository()
+	log.Printf("!!!HI HOW ARE YOU? LET'S LIST SOME DATA SETS!!!")
 	return repository.ListUserDataSets(ctx, userID, filter, pagination)
 }
 

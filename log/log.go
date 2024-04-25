@@ -1,5 +1,7 @@
 package log
 
+import "io"
+
 type (
 	Fields     map[string]interface{}
 	Level      string
@@ -9,6 +11,7 @@ type (
 
 type Serializer interface {
 	Serialize(fields Fields) error
+	SetWriter(w io.Writer)
 }
 
 type Logger interface {
@@ -35,4 +38,6 @@ type Logger interface {
 	WithLevel(level Level) Logger
 
 	Level() Level
+
+	SetSerializer(Serializer)
 }

@@ -184,3 +184,7 @@ func joinFields(fields ...Fields) Fields {
 	}
 	return joined
 }
+
+func (l *logger) SetSerializer(s Serializer) {
+	l.serializer = s
+}

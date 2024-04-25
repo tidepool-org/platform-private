@@ -1,6 +1,8 @@
 package null
 
 import (
+	"io"
+
 	"github.com/tidepool-org/platform/errors"
 	"github.com/tidepool-org/platform/log"
 )
@@ -20,3 +22,5 @@ func (s *serializer) Serialize(fields log.Fields) error {
 
 	return nil
 }
+
+func (s *serializer) SetWriter(w io.Writer) { /* no op */ }

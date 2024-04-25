@@ -580,7 +580,7 @@ github.com/tidepool-org/clinic/client
 # github.com/tidepool-org/devices/api v0.0.0-20240412011010-75b16d8daec0
 ## explicit; go 1.22
 github.com/tidepool-org/devices/api
-# github.com/tidepool-org/go-common v0.12.1 => ../go-common
+# github.com/tidepool-org/go-common v0.12.2-0.20240423185608-99e1438de0cc
 ## explicit; go 1.22
 github.com/tidepool-org/go-common/asyncevents
 github.com/tidepool-org/go-common/clients
@@ -952,4 +952,3 @@ gopkg.in/yaml.v3
 syreclabs.com/go/faker
 syreclabs.com/go/faker/locales
 # github.com/gofiber/fiber/v2 v2.49.1 => github.com/gofiber/fiber/v2 v2.52.0
-# github.com/tidepool-org/go-common => ../go-common
