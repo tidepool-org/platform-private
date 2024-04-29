@@ -39,7 +39,7 @@ func NewStore(c *Config) (*Store, error) {
 		config: c,
 	}
 
-	dl, _ := devlog.New(os.Stderr)
+	dl, _ := devlog.NewWithDefaults(os.Stderr)
 	mla := &mongoLogAdapter{
 		Logger: dl,
 	}

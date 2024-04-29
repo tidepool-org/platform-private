@@ -17,6 +17,7 @@ const (
 
 type Client interface {
 	GetUserPermissions(ctx context.Context, requestUserID string, targetUserID string) (Permissions, error)
+	GetUsersFollowers(ctx context.Context, userID string) (Permissions, error)
 }
 
 func FixOwnerPermissions(permissions Permissions) Permissions {

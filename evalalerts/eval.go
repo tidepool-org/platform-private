@@ -2,7 +2,6 @@ package evalalerts
 
 import (
 	"context"
-	stdlog "log"
 	"os"
 	"slices"
 	"sort"
@@ -15,16 +14,21 @@ import (
 	"github.com/tidepool-org/platform/data/types/blood/glucose"
 	"github.com/tidepool-org/platform/data/types/blood/glucose/continuous"
 	"github.com/tidepool-org/platform/errors"
+	"github.com/tidepool-org/platform/log"
 	"github.com/tidepool-org/platform/log/devlog"
 )
 
-func Evaluate(ctx context.Context, repo store.DataRepository, client *alerts.Client, followedUserID, userID string) (err error) {
-	config, err := client.Get(ctx, followedUserID, userID)
-	if err != nil {
-		return err
+func Evaluate(ctx context.Context, repo store.DataRepository, alertsClient *alerts.Client, followedUserID, userID string) (err error) {
+
+	lgr := log.LoggerFromContext(ctx)
+	if lgr == nil {
+		lgr, _ = devlog.NewWithDefaults(os.Stderr)
 	}
 
-	stdlog.Printf("config: %+v", config)
+	config, err := alertsClient.Get(ctx, followedUserID, userID)
+	if err != nil {
+		return errors.Wrap(err, "getting client config")
+	}
 
 	if config.Alerts.NoCommunication != nil && config.Alerts.NoCommunication.Enabled {
 		// If the user is already being notified about NoCommunication alerts,
@@ -35,22 +39,19 @@ func Evaluate(ctx context.Context, repo store.DataRepository, client *alerts.Cli
 		}
 	}
 
-	// TODO: need repo!
-	datum, err := FollowedUsersDatum(ctx, client, repo, config.FollowedUserID)
+	datum, err := FollowedUsersDatum(ctx, alertsClient, repo, config.FollowedUserID)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "retrieving user data")
 	}
-
-	stdlog.Printf("datum: %+v", datum)
 
 	if config.Alerts.UrgentLow != nil && config.Alerts.UrgentLow.Enabled {
 		changed, err := evaluateUrgentLow(ctx, datum, config.UrgentLow)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "evaluating urgent low")
 		}
 		if changed {
-			if err := client.Upsert(ctx, config); err != nil {
-				return err
+			if err := alertsClient.Upsert(ctx, config); err != nil {
+				return errors.Wrap(err, "upserting alerts info after urgent low")
 			}
 		}
 		return nil
@@ -61,7 +62,7 @@ func Evaluate(ctx context.Context, repo store.DataRepository, client *alerts.Cli
 			return err
 		}
 		if changed {
-			if err := client.Upsert(ctx, config); err != nil {
+			if err := alertsClient.Upsert(ctx, config); err != nil {
 				return err
 			}
 		}
@@ -73,17 +74,20 @@ func Evaluate(ctx context.Context, repo store.DataRepository, client *alerts.Cli
 			return err
 		}
 		if changed {
-			if err := client.Upsert(ctx, config); err != nil {
+			if err := alertsClient.Upsert(ctx, config); err != nil {
 				return err
 			}
 		}
 	}
+
+	lgr.Debugf("Evaluate is returning nil")
 	return nil
 }
 
 // evaluateUrgentLow determines if an alert should be sent. It returns an
 // updated Activity if changes need to be saved.
 func evaluateUrgentLow(ctx context.Context, datum *glucose.Glucose, alert *alerts.UrgentLowAlert) (_ bool, err error) {
+
 	if datum.Blood.Units == nil || datum.Blood.Value == nil || datum.Blood.Time == nil {
 		return false, errors.New("Unable to evaluate datum: Units, Value, or Time is nil")
 	}
@@ -93,6 +97,15 @@ func evaluateUrgentLow(ctx context.Context, datum *glucose.Glucose, alert *alert
 	}
 
 	alertIsFiring := *datum.Blood.Value < *threshold
+	lgr := log.LoggerFromContext(ctx)
+	if lgr == nil {
+		lgr, _ = devlog.NewWithDefaults(os.Stderr)
+	}
+	lgr.WithFields(log.Fields{
+		"blood":     datum.Blood,
+		"threshold": *threshold,
+		"isFiring?": alertIsFiring,
+	}).Debug("urgent low")
 	if !alertIsFiring {
 		alert.Activity.Resolved = time.Now()
 		return true, nil
@@ -108,6 +121,11 @@ func evaluateUrgentLow(ctx context.Context, datum *glucose.Glucose, alert *alert
 }
 
 func sendNotificationUrgentLow(ctx context.Context, datum *glucose.Glucose, alert *alerts.UrgentLowAlert) error {
+	lgr := log.LoggerFromContext(ctx)
+	if lgr == nil {
+		lgr, _ = devlog.NewWithDefaults(os.Stderr)
+	}
+	lgr.Debug("FIRE AN URGENT LOW NOTIFICATION")
 	return nil
 }
 
@@ -128,6 +146,10 @@ func evaluateNotLooping(ctx context.Context, datum *glucose.Glucose, alert *aler
 }
 
 func FollowedUsersDatum(ctx context.Context, client *alerts.Client, repo store.DataRepository, userID string) (*glucose.Glucose, error) {
+	lgr := log.LoggerFromContext(ctx)
+	if lgr == nil {
+		lgr, _ = devlog.NewWithDefaults(os.Stderr)
+	}
 	var status *types.UserLastUpdated
 	// Retrieve the most recent upload only. The intention is for this
 	// function to be triggered for each new update, so only the latest
@@ -138,7 +160,6 @@ func FollowedUsersDatum(ctx context.Context, client *alerts.Client, repo store.D
 		return nil, err
 	}
 
-	lgr, _ := devlog.New(os.Stdout)
 	lgr.WithField("userID", userID).WithField("status", status).Debug("GetLastUpdatedForUser")
 
 	cursor, err := repo.GetDataRange(ctx, userID, continuous.Type, status)

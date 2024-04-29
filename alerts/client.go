@@ -3,13 +3,14 @@ package alerts
 import (
 	"context"
 	"fmt"
-	stdlog "log"
 	"net/http"
 
 	"github.com/kelseyhightower/envconfig"
 
 	"github.com/tidepool-org/platform/auth"
 	"github.com/tidepool-org/platform/client"
+	"github.com/tidepool-org/platform/errors"
+	"github.com/tidepool-org/platform/log"
 	platformlog "github.com/tidepool-org/platform/log"
 	"github.com/tidepool-org/platform/log/null"
 	"github.com/tidepool-org/platform/platform"
@@ -88,14 +89,17 @@ func (c *Client) Delete(ctx context.Context, cfg *Config) error {
 
 // Get a user's alert configuration for the followed user.
 func (c *Client) Get(ctx context.Context, followedUserID, userID string) (*Config, error) {
-	stdlog.Printf("is c nil?! %+v", c)
-	stdlog.Printf("is c.client nil?! %+v", c.client)
-	c.logger.WithField("client", c.client).Warn("here's the client")
+	c.logger.WithFields(log.Fields{
+		"client":         c.client,
+		"userID":         userID,
+		"followedUserID": followedUserID,
+	}).Debug("here's the client")
 	url := c.client.ConstructURL("v1", "users", followedUserID, "followers", userID, "alerts")
+	c.logger.WithField("url", url).Debug("constructed URL")
 	cfg := &Config{}
 	err := c.request(ctx, http.MethodGet, url, nil, cfg)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "requesting alerts config")
 	}
 	return cfg, nil
 }
@@ -107,6 +111,11 @@ func (c *Client) ctxWithAuth(ctx context.Context) (context.Context, error) {
 		return nil, fmt.Errorf("retrieving token: %w", err)
 	}
 	return auth.NewContextWithServerSessionToken(ctx, token), nil
+}
+
+func (c *Client) FindFollowersConfigs(ctx context.Context, userID string) ([]Config, error) {
+
+	return nil, nil
 }
 
 // ConfigLoader abstracts the method by which config values are loaded.

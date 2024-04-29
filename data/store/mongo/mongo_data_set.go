@@ -258,7 +258,7 @@ func (d *DataSetRepository) ListUserDataSets(ctx context.Context, userID string,
 	now := time.Now()
 	//logger := log.LoggerFromContext(ctx).WithFields(log.Fields{"userId": userID, "filter": filter, "pagination": pagination})
 
-	logger, _ := devlog.New(os.Stderr)
+	logger, _ := devlog.NewWithDefaults(os.Stderr)
 	logger = logger.WithFields(log.Fields{"userId": userID, "filter": filter, "pagination": pagination})
 
 	dataSets := data.DataSets{}

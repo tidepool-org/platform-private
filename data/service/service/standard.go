@@ -26,6 +26,7 @@ import (
 	dataSourceStoreStructured "github.com/tidepool-org/platform/data/source/store/structured"
 	dataSourceStoreStructuredMongo "github.com/tidepool-org/platform/data/source/store/structured/mongo"
 	dataStoreMongo "github.com/tidepool-org/platform/data/store/mongo"
+	"github.com/tidepool-org/platform/data/types/blood"
 	"github.com/tidepool-org/platform/errors"
 	"github.com/tidepool-org/platform/evalalerts"
 	"github.com/tidepool-org/platform/events"
@@ -430,7 +431,7 @@ func (s *Standard) initializeAlertsEventsHandler() error {
 	s.Logger().Debug("Initializing alerts events handler")
 
 	// TODO: dev only, replace with jsonlogger for prod
-	devLogger, err := devlog.New(os.Stderr)
+	devLogger, err := devlog.NewWithDefaults(os.Stderr)
 	if err != nil {
 		return err
 	}
@@ -578,15 +579,29 @@ func (c *alertsEventsConsumer) Consume(ctx context.Context,
 		return nil
 	}
 
-	if !strings.HasSuffix(msg.Topic, ".data.alerts") && !strings.HasSuffix(msg.Topic, ".data.deviceData.alerts") {
+	switch {
+	case strings.HasSuffix(msg.Topic, ".data.alerts"):
+		return c.consumeAlerts(ctx, session, msg)
+	case strings.HasSuffix(msg.Topic, ".data.deviceData.alerts"):
+		return c.consumeDeviceData(ctx, session, msg)
+	default:
 		c.logger.Infof("skipping message (wrong topic) %s", msg.Topic)
-		return nil
 	}
 
+	return nil
+}
+
+type alertsMessage struct {
+	FullDocument alerts.Config `json:"fullDocument"`
+}
+
+func (c *alertsEventsConsumer) consumeAlerts(ctx context.Context,
+	session sarama.ConsumerGroupSession, msg *sarama.ConsumerMessage) error {
+
 	am := &alertsMessage{}
-	err = bson.UnmarshalExtJSON(msg.Value, false, am)
+	err := bson.UnmarshalExtJSON(msg.Value, false, am)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "unwrapping message")
 	}
 	cfg := am.FullDocument
 	c.logger.WithField("cfg", cfg).Debug("consuming an alerts message")
@@ -595,14 +610,36 @@ func (c *alertsEventsConsumer) Consume(ctx context.Context,
 	// TODO: pass it off to the evaulator
 	err = evalalerts.Evaluate(ctx, dataRepo, c.alertsClient, cfg.FollowedUserID, cfg.UserID)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "Evaluate")
 	}
-
-	// TODO: mark message consumed
-
+	session.MarkMessage(msg, "")
+	c.logger.WithField("message", msg).Debug("marked")
 	return nil
 }
 
-type alertsMessage struct {
-	FullDocument alerts.Config `json:"fullDocument"`
+func (c *alertsEventsConsumer) consumeDeviceData(ctx context.Context,
+	session sarama.ConsumerGroupSession, msg *sarama.ConsumerMessage) error {
+
+	var err error
+	bloodDoc := &bloodDocument{}
+	err = bson.UnmarshalExtJSON(msg.Value, false, bloodDoc)
+	if err != nil {
+		c.logger.WithError(err).Debug("blood failed to unmarshal")
+	}
+	blood := bloodDoc.FullDocument
+	c.logger.WithField("blood", blood).Debug("device data")
+
+	// find users that have alerts for this user
+	// there's a gatekeeper url for this, but I think that I probably shouldn't be using that..?
+
+	// loop over said users
+	c.logger.Debug("TODO: find users that have alerts for this user")
+
+	session.MarkMessage(msg, "")
+	c.logger.WithField("message", msg).Debug("marked")
+	return nil
+}
+
+type bloodDocument struct {
+	FullDocument blood.Blood `json:"fullDocument"`
 }
