@@ -48,7 +48,6 @@ func (c *Client) GetUserPermissions(ctx context.Context, requestUserID string, t
 }
 
 func (c *Client) GetUsersFollowers(ctx context.Context, userID string) (Permissions, error) {
-
 	url := c.client.ConstructURL("access", userID)
 	result := permission.Permissions{}
 	err := c.client.RequestData(ctx, "GET", url, nil, nil, &result)
