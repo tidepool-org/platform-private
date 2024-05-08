@@ -2,7 +2,7 @@ package types
 
 import (
 	"context"
-	"errors"
+	stderrors "errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -11,6 +11,7 @@ import (
 
 	"github.com/tidepool-org/platform/data/blood/glucose"
 	glucoseDatum "github.com/tidepool-org/platform/data/types/blood/glucose"
+	"github.com/tidepool-org/platform/errors"
 	"github.com/tidepool-org/platform/pointer"
 )
 
@@ -38,6 +39,8 @@ type CGMBucketData struct {
 }
 
 type CGMPeriod struct {
+	BGMPeriod
+
 	HasTimeCGMUsePercent   bool     `json:"hasTimeCGMUsePercent" bson:"hasTimeCGMUsePercent"`
 	TimeCGMUsePercent      *float64 `json:"timeCGMUsePercent" bson:"timeCGMUsePercent"`
 	TimeCGMUsePercentDelta *float64 `json:"timeCGMUsePercentDelta" bson:"timeCGMUsePercentDelta"`
@@ -207,6 +210,83 @@ func (s *CGMStats) ClearInvalidatedBuckets(earliestModified time.Time) (firstDat
 	return
 }
 
+/*
+
+so lets take this function as an example
+
+its an update function that unpacks the cursor, not much else.  in
+realtimestats, the cgm version of this becomes partially unique, in that it
+collects the uploadIds, and checks if the upload is continuous or not
+
+but the base is identical, with one additional chunk
+
+in inheritance, id throw this on the base class, extend it in the cgm version
+by calling the original, with either some kind of module substitution for the
+optional part, or unpack it slightly so i extend the outer loop as a 2nd
+function instead, and call the inner one, you get the idea, extend, add my
+unique chunk via the code layout somehow
+
+so if i need this function in 3 summaries, and it operates on the unique part
+of each summary, (summary buckets, calculatesummary), but the code between
+them is identical, with one of the 3 with an extend, how would i make this one
+copy?
+
+cgmstats as the parent with summary as the embed still means i have 3 of
+these, as the embed cant operate on cgmstats?
+
+my approach previously can be seen with AddData, where the solution, since
+methods cant take generic arguments for some reason, is to extract it into a
+function, removing that limitation, and then i need interface getter/setters
+for everything, which gets super ugly
+
+plus a pipeline of detached functions operating on an object reads like
+spagetti at this level to me
+
+im obviously missing something, but what?
+
+*/
+
+func (s *CGMStats) Update2(ctx context.Context, cursor DeviceDataCursor) error {
+	err := readCursorIntoBuckets[*CGMBucketData, CGMBucketData, glucoseDatum.Glucose](ctx, cursor, &s.Buckets, decodeGlucoseFromCursor)
+	if err != nil {
+		return err
+	}
+	s.CalculateSummary()
+	return nil
+}
+
+func decodeGlucoseFromCursor(cursor DeviceDataCursor) (*glucoseDatum.Glucose, error) {
+	r := &glucoseDatum.Glucose{}
+	if err := cursor.Decode(r); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+type DecoderFunc[R RecordTypes, D RecordTypesPt[R]] func(DeviceDataCursor) (D, error)
+
+const readingsPerAdd = 100
+
+func readCursorIntoBuckets[A BucketDataPt[T], T BucketData, R RecordTypes, D RecordTypesPt[R]](
+	ctx context.Context, cursor DeviceDataCursor, buckets *[]*Bucket[A, T], decoder DecoderFunc[R, D]) error {
+
+	var userData = make([]D, 0, readingsPerAdd)
+	for cursor.Next(ctx) {
+		record, err := decoder(cursor)
+		if err != nil {
+			return err
+		}
+		userData = append(userData, record)
+		if len(userData) == readingsPerAdd {
+			if err := AddData(buckets, userData); err != nil {
+				return errors.Wrapf(err, "Unable to add user data to buckets")
+			}
+			userData = make([]D, 0, readingsPerAdd)
+		}
+	}
+	return nil
+}
+
 func (s *CGMStats) Update(ctx context.Context, cursor DeviceDataCursor) error {
 	var userData []*glucoseDatum.Glucose = nil
 	var err error
@@ -249,7 +329,7 @@ func (s *CGMStats) Update(ctx context.Context, cursor DeviceDataCursor) error {
 func (B *CGMBucketData) CalculateStats(r any, lastRecordTime *time.Time) (bool, error) {
 	dataRecord, ok := r.(*glucoseDatum.Glucose)
 	if !ok {
-		return false, errors.New("CGM record for calculation is not compatible with Glucose type")
+		return false, stderrors.New("CGM record for calculation is not compatible with Glucose type")
 	}
 
 	// this is a new bucket, use current record as duration reference
