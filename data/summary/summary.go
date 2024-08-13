@@ -25,10 +25,10 @@ type SummarizerRegistry struct {
 	summarizers map[string]any
 }
 
-func New(summaryRepository *storeStructuredMongo.Repository, fetcher fetcher.DeviceDataFetcher) *SummarizerRegistry {
+func New(summaryRepository *storeStructuredMongo.Repository, bucketsRepository *storeStructuredMongo.Repository, fetcher fetcher.DeviceDataFetcher) *SummarizerRegistry {
 	registry := &SummarizerRegistry{summarizers: make(map[string]any)}
 	addSummarizer(registry, NewBGMSummarizer(summaryRepository, fetcher))
-	addSummarizer(registry, NewCGMSummarizer(summaryRepository, fetcher))
+	addSummarizer(registry, NewCGMSummarizer(summaryRepository, bucketsRepository, fetcher))
 	addSummarizer(registry, NewContinuousSummarizer(summaryRepository, fetcher))
 	return registry
 }
@@ -65,7 +65,8 @@ func CreateGlucoseDatum() data.Datum {
 type GlucoseSummarizer[A types.StatsPt[T], T types.Stats] struct {
 	cursorFactory fetcher.DataCursorFactory
 	dataFetcher   fetcher.DeviceDataFetcher
-	summaries     *store.Repo[A, T]
+	summaries     *store.Summaries[A, T]
+	buckets       *store.Buckets[A, T]
 }
 
 func NewBGMSummarizer(collection *storeStructuredMongo.Repository, dataFetcher fetcher.DeviceDataFetcher) Summarizer[*types.BGMStats, types.BGMStats] {
@@ -74,17 +75,18 @@ func NewBGMSummarizer(collection *storeStructuredMongo.Repository, dataFetcher f
 			return fetcher.NewDefaultCursor(c, CreateGlucoseDatum)
 		},
 		dataFetcher: dataFetcher,
-		summaries:   store.New[*types.BGMStats](collection),
+		summaries:   store.NewSummaries[*types.BGMStats](collection),
 	}
 }
 
-func NewCGMSummarizer(collection *storeStructuredMongo.Repository, dataFetcher fetcher.DeviceDataFetcher) Summarizer[*types.CGMStats, types.CGMStats] {
+func NewCGMSummarizer(collection *storeStructuredMongo.Repository, bucketsCollection *storeStructuredMongo.Repository, dataFetcher fetcher.DeviceDataFetcher) Summarizer[*types.CGMStats, types.CGMStats] {
 	return &GlucoseSummarizer[*types.CGMStats, types.CGMStats]{
 		cursorFactory: func(c *mongo.Cursor) fetcher.DeviceDataCursor {
 			return fetcher.NewDefaultCursor(c, CreateGlucoseDatum)
 		},
 		dataFetcher: dataFetcher,
-		summaries:   store.New[*types.CGMStats](collection),
+		summaries:   store.NewSummaries[*types.CGMStats](collection),
+		buckets:     store.NewBuckets[*types.GlucoseBuckets](bucketsCollection),
 	}
 }
 
@@ -95,7 +97,7 @@ func NewContinuousSummarizer(collection *storeStructuredMongo.Repository, dataFe
 			return fetcher.NewContinuousDeviceDataCursor(defaultCursor, dataFetcher, CreateGlucoseDatum)
 		},
 		dataFetcher: dataFetcher,
-		summaries:   store.New[*types.ContinuousStats](collection),
+		summaries:   store.NewSummaries[*types.ContinuousStats](collection),
 	}
 }
 

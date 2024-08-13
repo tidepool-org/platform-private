@@ -53,10 +53,6 @@ type OutdatedSummariesResponse struct {
 	End     time.Time `json:"end"`
 }
 
-type BucketData interface {
-	CGMBucketData | BGMBucketData | ContinuousBucketData
-}
-
 type Config struct {
 	SchemaVersion int `json:"schemaVersion" bson:"schemaVersion"`
 
@@ -103,25 +99,6 @@ func (d *Dates) Update(status *data.UserDataStatus, firstBucketDate time.Time) {
 	d.OutdatedReason = nil
 }
 
-type Bucket[S BucketDataPt[T], T BucketData] struct {
-	Date           time.Time `json:"date" bson:"date"`
-	LastRecordTime time.Time `json:"lastRecordTime" bson:"lastRecordTime"`
-
-	Data S `json:"data" bson:"data"`
-}
-
-type BucketDataPt[T BucketData] interface {
-	*T
-	CalculateStats(interface{}, *time.Time) (bool, error)
-}
-
-func CreateBucket[A BucketDataPt[T], T BucketData](t time.Time) *Bucket[A, T] {
-	bucket := new(Bucket[A, T])
-	bucket.Date = t
-	bucket.Data = new(T)
-	return bucket
-}
-
 type Stats interface {
 	CGMStats | BGMStats | ContinuousStats
 }
@@ -131,10 +108,7 @@ type StatsPt[T Stats] interface {
 	GetType() string
 	GetDeviceDataTypes() []string
 	Init()
-	GetBucketsLen() int
-	GetBucketDate(int) time.Time
 	Update(context.Context, fetcher.DeviceDataCursor) error
-	ClearInvalidatedBuckets(earliestModified time.Time) time.Time
 }
 
 type Summary[A StatsPt[T], T Stats] struct {
@@ -225,7 +199,7 @@ func GetDeviceDataTypeStrings[A StatsPt[T], T Stats]() []string {
 }
 
 type Period interface {
-	BGMPeriod | CGMPeriod
+	BGMPeriod | GlucosePeriod
 }
 
 func AddBin[A BucketDataPt[T], T BucketData](buckets *[]*Bucket[A, T], newBucket *Bucket[A, T]) error {

@@ -53,3 +53,19 @@ func Abs[T Number](x T) T {
 	}
 	return x
 }
+
+func BinDelta(bin, offsetBin, deltaBin, offsetDeltaBin *GlucoseBin) {
+	deltaBin.Percent = bin.Percent - offsetBin.Percent
+	offsetDeltaBin.Percent = -deltaBin.Percent
+
+	deltaBin.Records = bin.Records - offsetBin.Records
+	offsetDeltaBin.Records = -deltaBin.Records
+
+	deltaBin.Minutes = bin.Minutes - offsetBin.Minutes
+	offsetDeltaBin.Minutes = -deltaBin.Minutes
+}
+
+func Delta[T Number](a, b, c, d *T) {
+	*c = *a - *b
+	*d = -*c
+}

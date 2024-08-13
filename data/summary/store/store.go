@@ -15,27 +15,27 @@ import (
 	storeStructuredMongo "github.com/tidepool-org/platform/store/structured/mongo"
 )
 
-type Repo[A types.StatsPt[T], T types.Stats] struct {
+type Summaries[A types.StatsPt[T], T types.Stats] struct {
 	*storeStructuredMongo.Repository
 }
 
-type TypelessRepo struct {
+type TypelessSummaries struct {
 	*storeStructuredMongo.Repository
 }
 
-func New[A types.StatsPt[T], T types.Stats](delegate *storeStructuredMongo.Repository) *Repo[A, T] {
-	return &Repo[A, T]{
+func NewSummaries[A types.StatsPt[T], T types.Stats](delegate *storeStructuredMongo.Repository) *Summaries[A, T] {
+	return &Summaries[A, T]{
 		delegate,
 	}
 }
 
-func NewTypeless(delegate *storeStructuredMongo.Repository) *TypelessRepo {
-	return &TypelessRepo{
+func NewTypeless(delegate *storeStructuredMongo.Repository) *TypelessSummaries {
+	return &TypelessSummaries{
 		delegate,
 	}
 }
 
-func (r *Repo[A, T]) GetSummary(ctx context.Context, userId string) (*types.Summary[A, T], error) {
+func (r *Summaries[A, T]) GetSummary(ctx context.Context, userId string) (*types.Summary[A, T], error) {
 	if ctx == nil {
 		return nil, errors.New("context is missing")
 	}
@@ -59,7 +59,7 @@ func (r *Repo[A, T]) GetSummary(ctx context.Context, userId string) (*types.Summ
 	return summary, nil
 }
 
-func (r *TypelessRepo) DeleteSummary(ctx context.Context, userId string) error {
+func (r *TypelessSummaries) DeleteSummary(ctx context.Context, userId string) error {
 	if ctx == nil {
 		return errors.New("context is missing")
 	}
@@ -79,7 +79,7 @@ func (r *TypelessRepo) DeleteSummary(ctx context.Context, userId string) error {
 	return nil
 }
 
-func (r *Repo[A, T]) DeleteSummary(ctx context.Context, userId string) error {
+func (r *Summaries[A, T]) DeleteSummary(ctx context.Context, userId string) error {
 	if ctx == nil {
 		return errors.New("context is missing")
 	}
@@ -100,7 +100,7 @@ func (r *Repo[A, T]) DeleteSummary(ctx context.Context, userId string) error {
 	return nil
 }
 
-func (r *Repo[A, T]) ReplaceSummary(ctx context.Context, userSummary *types.Summary[A, T]) error {
+func (r *Summaries[A, T]) ReplaceSummary(ctx context.Context, userSummary *types.Summary[A, T]) error {
 	if ctx == nil {
 		return errors.New("context is missing")
 	}
@@ -128,7 +128,7 @@ func (r *Repo[A, T]) ReplaceSummary(ctx context.Context, userSummary *types.Summ
 	return err
 }
 
-func (r *Repo[T, A]) DistinctSummaryIDs(ctx context.Context) ([]string, error) {
+func (r *Summaries[T, A]) DistinctSummaryIDs(ctx context.Context) ([]string, error) {
 	if ctx == nil {
 		return nil, errors.New("context is missing")
 	}
@@ -148,7 +148,7 @@ func (r *Repo[T, A]) DistinctSummaryIDs(ctx context.Context) ([]string, error) {
 	return userIDs, nil
 }
 
-func (r *Repo[T, A]) CreateSummaries(ctx context.Context, summaries []*types.Summary[T, A]) (int, error) {
+func (r *Summaries[T, A]) CreateSummaries(ctx context.Context, summaries []*types.Summary[T, A]) (int, error) {
 	if ctx == nil {
 		return 0, errors.New("context is missing")
 	}
@@ -185,7 +185,7 @@ func (r *Repo[T, A]) CreateSummaries(ctx context.Context, summaries []*types.Sum
 	return count, nil
 }
 
-func (r *Repo[A, T]) SetOutdated(ctx context.Context, userId, reason string) (*time.Time, error) {
+func (r *Summaries[A, T]) SetOutdated(ctx context.Context, userId, reason string) (*time.Time, error) {
 	if ctx == nil {
 		return nil, errors.New("context is missing")
 	}
@@ -213,7 +213,7 @@ func (r *Repo[A, T]) SetOutdated(ctx context.Context, userId, reason string) (*t
 	return userSummary.Dates.OutdatedSince, nil
 }
 
-func (r *Repo[T, A]) GetOutdatedUserIDs(ctx context.Context, page *page.Pagination) (*types.OutdatedSummariesResponse, error) {
+func (r *Summaries[T, A]) GetOutdatedUserIDs(ctx context.Context, page *page.Pagination) (*types.OutdatedSummariesResponse, error) {
 	if ctx == nil {
 		return nil, errors.New("context is missing")
 	}
@@ -263,7 +263,7 @@ func (r *Repo[T, A]) GetOutdatedUserIDs(ctx context.Context, page *page.Paginati
 	return response, nil
 }
 
-func (r *Repo[T, A]) GetMigratableUserIDs(ctx context.Context, page *page.Pagination) ([]string, error) {
+func (r *Summaries[T, A]) GetMigratableUserIDs(ctx context.Context, page *page.Pagination) ([]string, error) {
 	if ctx == nil {
 		return nil, errors.New("context is missing")
 	}
