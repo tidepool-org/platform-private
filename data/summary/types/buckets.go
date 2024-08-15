@@ -1,8 +1,6 @@
 package types
 
-import (
-	"time"
-)
+import "time"
 
 type GlucoseBin struct {
 	Glucose  float64 `json:"glucose,omitempty" bson:"glucose,omitempty"`
@@ -32,23 +30,23 @@ type GlucoseBucketData struct {
 
 type GlucoseBucket struct {
 	GlucoseBucketData
-	Type           string    `json:"type" bson:"type"`
-	Date           time.Time `json:"date" bson:"date"`
-	LastRecordTime time.Time `json:"lastRecordTime" bson:"lastRecordTime"`
 }
 
-type GlucoseBuckets []*GlucoseBucket
+type Bucket[B BucketData] struct {
+	UserId    string    `json:"userId" bson:"userId"`
+	Type      string    `json:"type" bson:"type"`
+	Time      time.Time `json:"time" bson:"time"`
+	FirstTime time.Time `json:"firstTime" bson:"firstTime"`
+	LastTime  time.Time `json:"lastTime" bson:"lastTime"`
 
-// ContinuousBuckets TODO placeholder for generics testing
-type ContinuousBuckets []*GlucoseBucket
-
-type Buckets interface {
-	GlucoseBuckets | ContinuousBuckets
+	Data B `json:"data" bson:"data"`
 }
 
-type BucketsPt[T Buckets] interface {
-	*T
-	GetType() string
+// ContinuousBucket TODO placeholder for generics testing
+type ContinuousBucket GlucoseBucket
+
+type BucketData interface {
+	GlucoseBucketData | ContinuousBucketData
 }
 
 //type BucketDataPt[T BucketData] interface {

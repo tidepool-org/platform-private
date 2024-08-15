@@ -52,30 +52,6 @@ func (s *CGMStats) Init() {
 	s.TotalHours = 0
 }
 
-func (s *CGMStats) ClearInvalidatedBuckets(earliestModified time.Time) (firstData time.Time) {
-	if len(s.Buckets) == 0 {
-		return
-	} else if earliestModified.After(s.Buckets[len(s.Buckets)-1].LastRecordTime) {
-		return s.Buckets[len(s.Buckets)-1].LastRecordTime
-	} else if earliestModified.Before(s.Buckets[0].Date) || earliestModified.Equal(s.Buckets[0].Date) {
-		// we are before all existing buckets, remake for GC
-		s.Buckets = make([]*Bucket[*GlucoseBucketData, GlucoseBucketData], 0)
-		return
-	}
-
-	offset := len(s.Buckets) - (int(s.Buckets[len(s.Buckets)-1].Date.Sub(earliestModified.UTC().Truncate(time.Hour)).Hours()) + 1)
-
-	for i := offset; i < len(s.Buckets); i++ {
-		s.Buckets[i] = nil
-	}
-	s.Buckets = s.Buckets[:offset]
-
-	if len(s.Buckets) > 0 {
-		return s.Buckets[len(s.Buckets)-1].LastRecordTime
-	}
-	return
-}
-
 func (s *CGMStats) Update(ctx context.Context, cursor fetcher.DeviceDataCursor) error {
 	hasMoreData := true
 	for hasMoreData {

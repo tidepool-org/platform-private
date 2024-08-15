@@ -18,7 +18,7 @@ require (
 	github.com/mjibson/esc v0.2.0
 	github.com/onsi/ginkgo/v2 v2.20.0
 	github.com/onsi/gomega v1.34.1
-	github.com/prometheus/client_golang v1.19.1
+	github.com/prometheus/client_golang v1.20.0
 	github.com/rinchsan/device-check-go v1.3.0
 	github.com/tidepool-org/clinic/client v0.0.0-20240802193352-3f912afe2109
 	github.com/tidepool-org/devices/api v0.0.0-20240412011010-75b16d8daec0
@@ -71,6 +71,7 @@ require (
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.17.9 // indirect
+	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect

@@ -198,11 +198,11 @@ func GetDeviceDataTypeStrings[A StatsPt[T], T Stats]() []string {
 	return s.Stats.GetDeviceDataTypes()
 }
 
-type Period interface {
-	BGMPeriod | GlucosePeriod
-}
+//type Period interface {
+//	BGMPeriod | GlucosePeriod
+//}
 
-func AddBin[A BucketDataPt[T], T BucketData](buckets *[]*Bucket[A, T], newBucket *Bucket[A, T]) error {
+func AddBin[T BucketData](buckets *[]*Bucket[T], newBucket *Bucket[T]) error {
 	if len(*buckets) == 0 {
 		*buckets = append(*buckets, newBucket)
 		return nil
@@ -298,9 +298,9 @@ func removeExcessBuckets[A BucketDataPt[T], T BucketData](buckets *[]*Bucket[A, 
 	*buckets = (*buckets)[excess:]
 }
 
-func AddData[A BucketDataPt[T], T BucketData](buckets *[]*Bucket[A, T], userData []data.Datum) error {
+func AddData[T BucketData](buckets *[]*Bucket[T], userData []data.Datum) error {
 	previousPeriod := time.Time{}
-	var newBucket *Bucket[A, T]
+	var newBucket *Bucket[T]
 
 	for _, r := range userData {
 		recordTime := r.GetTime().UTC()
