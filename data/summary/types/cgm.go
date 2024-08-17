@@ -15,7 +15,7 @@ import (
 )
 
 type GlucosePeriod struct {
-	GlucoseBucketData
+	GlucoseRanges
 	HoursWithData int `json:"hoursWithData,omitempty" bson:"hoursWithData,omitempty"`
 	DaysWithData  int `json:"daysWithData,omitempty" bson:"daysWithData,omitempty"`
 
@@ -75,34 +75,7 @@ func (s *CGMStats) Update(ctx context.Context, cursor fetcher.DeviceDataCursor) 
 	return nil
 }
 
-// CalculateVariance Implemented using https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Weighted_incremental_algorithm
-func (B *GlucoseBucketData) CalculateVariance(value float64, duration float64) float64 {
-	var mean float64 = 0
-	if B.Total.Minutes > 0 {
-		mean = B.Total.Glucose / float64(B.Total.Minutes)
-	}
-
-	weight := float64(B.Total.Minutes) + duration
-	newMean := mean + (duration/weight)*(value-mean)
-	return B.Total.Variance + duration*(value-mean)*(value-newMean)
-}
-
-// CombineVariance Implemented using https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm
-func (B *GlucoseBucketData) CombineVariance(newBucket *GlucoseBucketData) float64 {
-	n1 := float64(B.Total.Minutes)
-	n2 := float64(newBucket.Total.Minutes)
-
-	// if we have no values in any bucket, this will result in NaN, and cant be added anyway, return what we started with
-	if n1 == 0 || n2 == 0 {
-		return B.Total.Variance
-	}
-
-	n := n1 + n2
-	delta := newBucket.Total.Glucose/n2 - B.Total.Glucose/n1
-	return B.Total.Variance + newBucket.Total.Variance + math.Pow(delta, 2)*n1*n2/n
-}
-
-func (B *GlucoseBucketData) CalculateStats(r any, lastRecordTime *time.Time) (bool, error) {
+func (B *GlucoseBucket) CalculateStats(r any, lastRecordTime *time.Time) (bool, error) {
 	dataRecord, ok := r.(*glucoseDatum.Glucose)
 	if !ok {
 		return false, errors.New("CGM record for calculation is not compatible with Glucose type")
@@ -145,7 +118,7 @@ func (B *GlucoseBucketData) CalculateStats(r any, lastRecordTime *time.Time) (bo
 		}
 
 		// this must occur before the counters below as the pre-increment counters are used during calc
-		B.Total.Variance = B.CalculateVariance(normalizedValue, float64(duration))
+		B.Total.Variance = B.Total.CalculateVariance(normalizedValue, float64(duration))
 
 		B.Total.Minutes += duration
 		B.Total.Records++
@@ -156,37 +129,6 @@ func (B *GlucoseBucketData) CalculateStats(r any, lastRecordTime *time.Time) (bo
 	}
 
 	return true, nil
-}
-
-func (B *GlucoseBucketData) Add(new *GlucoseBucketData) {
-	if B.Total.Variance == 0 {
-		B.Total.Variance = new.Total.Variance
-	} else {
-		B.Total.Variance = B.CombineVariance(new)
-	}
-
-	B.Target.Minutes += new.Target.Minutes
-	B.Target.Records += new.Target.Records
-
-	B.Low.Minutes += new.Low.Minutes
-	B.Low.Records += new.Low.Records
-
-	B.VeryLow.Minutes += new.VeryLow.Minutes
-	B.VeryLow.Records += new.VeryLow.Records
-
-	B.High.Minutes += new.High.Minutes
-	B.High.Records += new.High.Records
-
-	B.VeryHigh.Minutes += new.VeryHigh.Minutes
-	B.VeryHigh.Records += new.VeryHigh.Records
-
-	B.ExtremeHigh.Minutes += new.ExtremeHigh.Minutes
-	B.ExtremeHigh.Records += new.ExtremeHigh.Records
-
-	B.Total.Glucose += new.Total.Glucose
-	B.Total.Minutes += new.Total.Minutes
-	B.Total.Records += new.Total.Records
-
 }
 
 func (s *CGMStats) CalculateSummary() {
@@ -291,7 +233,7 @@ func (s *CGMStats) CalculateDelta() {
 func (s *CGMStats) CalculatePeriod(i int, offset bool, period GlucosePeriod) {
 	// We don't make a copy of period, as the struct has no pointers... right? you didn't add any pointers right?
 	if period.Total.Records != 0 {
-		realMinutes := CalculateRealMinutes(i, s.Buckets[len(s.Buckets)-1].LastRecordTime, s.Buckets[len(s.Buckets)-1].Data.LastRecordDuration)
+		realMinutes := CalculateWallMinutes(i, s.Buckets[len(s.Buckets)-1].LastRecordTime, s.Buckets[len(s.Buckets)-1].Data.LastRecordDuration)
 		period.Total.Percent = float64(period.Total.Minutes) / realMinutes
 
 		// if we are storing under 1d, apply 70% rule
