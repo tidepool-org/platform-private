@@ -3,7 +3,6 @@ package types
 import (
 	"context"
 	"errors"
-	"math"
 	"strconv"
 	"time"
 
@@ -13,22 +12,6 @@ import (
 	"github.com/tidepool-org/platform/data/types/blood/glucose/continuous"
 	"github.com/tidepool-org/platform/pointer"
 )
-
-type GlucosePeriod struct {
-	GlucoseRanges
-	HoursWithData int `json:"hoursWithData,omitempty" bson:"hoursWithData,omitempty"`
-	DaysWithData  int `json:"daysWithData,omitempty" bson:"daysWithData,omitempty"`
-
-	AverageGlucose             float64 `json:"averageGlucoseMmol,omitempty" bson:"avgGlucose,omitempty"`
-	GlucoseManagementIndicator float64 `json:"glucoseManagementIndicator,omitempty" bson:"GMI,omitempty"`
-
-	CoefficientOfVariation float64 `json:"coefficientOfVariation,omitempty" bson:"CV,omitempty"`
-	StandardDeviation      float64 `json:"standardDeviation,omitempty" bson:"SD,omitempty"`
-
-	AverageDailyRecords float64 `json:"averageDailyRecords,omitempty" bson:"avgDailyRecords,omitempty,omitempty"`
-
-	Delta *GlucosePeriod `json:"delta,omitempty" bson:"delta,omitempty"`
-}
 
 type GlucosePeriods map[string]*GlucosePeriod
 
@@ -232,33 +215,7 @@ func (s *CGMStats) CalculateDelta() {
 
 func (s *CGMStats) CalculatePeriod(i int, offset bool, period GlucosePeriod) {
 	// We don't make a copy of period, as the struct has no pointers... right? you didn't add any pointers right?
-	if period.Total.Records != 0 {
-		realMinutes := CalculateWallMinutes(i, s.Buckets[len(s.Buckets)-1].LastRecordTime, s.Buckets[len(s.Buckets)-1].Data.LastRecordDuration)
-		period.Total.Percent = float64(period.Total.Minutes) / realMinutes
-
-		// if we are storing under 1d, apply 70% rule
-		// if we are storing over 1d, check for 24h cgm use
-		if (i <= 1 && period.Total.Percent > 0.7) || (i > 1 && period.Total.Minutes > 1440) {
-			period.Target.Percent = float64(period.Target.Minutes) / float64(period.Total.Minutes)
-			period.Low.Percent = float64(period.Low.Minutes) / float64(period.Total.Minutes)
-			period.VeryLow.Percent = float64(period.VeryLow.Minutes) / float64(period.Total.Minutes)
-			period.AnyLow.Percent = float64(period.VeryLow.Records+period.Low.Records) / float64(period.Total.Records)
-			period.High.Percent = float64(period.High.Minutes) / float64(period.Total.Minutes)
-			period.VeryHigh.Percent = float64(period.VeryHigh.Minutes) / float64(period.Total.Minutes)
-			period.ExtremeHigh.Percent = float64(period.ExtremeHigh.Minutes) / float64(period.Total.Minutes)
-			period.AnyHigh.Percent = float64(period.VeryHigh.Records+period.High.Records) / float64(period.Total.Records)
-		}
-
-		period.AverageGlucose = period.Total.Glucose / float64(period.Total.Minutes)
-
-		// we only add GMI if cgm use >70%, otherwise clear it
-		if period.Total.Percent > 0.7 {
-			period.GlucoseManagementIndicator = CalculateGMI(period.AverageGlucose)
-		}
-
-		period.StandardDeviation = math.Sqrt(period.Total.Variance / float64(period.Total.Minutes))
-		period.CoefficientOfVariation = period.StandardDeviation / period.AverageGlucose
-	}
+	period.Finalize()
 
 	if offset {
 		s.OffsetPeriods[strconv.Itoa(i)+"d"] = &period

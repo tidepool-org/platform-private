@@ -12,19 +12,19 @@ import (
 	"time"
 )
 
-type Buckets[T types.BucketData] struct {
+type Buckets[B types.BucketDataPt[A], A types.BucketData] struct {
 	*storeStructuredMongo.Repository
 	Type string
 }
 
-func NewBuckets[T types.BucketData](delegate *storeStructuredMongo.Repository, typ string) *Buckets[T] {
-	return &Buckets[T]{
+func NewBuckets[B types.BucketDataPt[A], A types.BucketData](delegate *storeStructuredMongo.Repository, typ string) *Buckets[B, A] {
+	return &Buckets[B, A]{
 		Repository: delegate,
 		Type:       typ,
 	}
 }
 
-func (r *Buckets[T]) GetBuckets(ctx context.Context, userId string) ([]T, error) {
+func (r *Buckets[B, A]) GetBuckets(ctx context.Context, userId string) ([]types.Bucket[B, A], error) {
 	if ctx == nil {
 		return nil, errors.New("context is missing")
 	}
@@ -32,7 +32,7 @@ func (r *Buckets[T]) GetBuckets(ctx context.Context, userId string) ([]T, error)
 		return nil, errors.New("userId is missing")
 	}
 
-	buckets := make([]T, 0)
+	buckets := make([]types.Bucket[B, A], 0)
 	selector := bson.M{
 		"userId": userId,
 		"type":   r.Type,
@@ -54,7 +54,29 @@ func (r *Buckets[T]) GetBuckets(ctx context.Context, userId string) ([]T, error)
 	return buckets, nil
 }
 
-func (r *Buckets[T]) AddBucket(ctx context.Context, bucket types.Bucket[T]) error {
+func (r *Buckets[B, A]) TrimExcessBuckets(ctx context.Context, userId string) error {
+	if ctx == nil {
+		return errors.New("context is missing")
+	}
+
+	bucket, err := r.GetEnd(ctx, userId, -1)
+	if err != nil {
+		return err
+	}
+
+	oldestTimeToKeep := bucket.Time.Add(-time.Hour * types.HoursAgoToKeep)
+
+	selector := bson.M{
+		"userId": userId,
+		"type":   r.Type,
+		"time":   bson.M{"$lt": oldestTimeToKeep},
+	}
+
+	_, err = r.DeleteMany(ctx, selector)
+	return err
+}
+
+func (r *Buckets[B, A]) AddBucket(ctx context.Context, bucket types.Bucket[B, A]) error {
 	if ctx == nil {
 		return errors.New("context is missing")
 	}
@@ -68,6 +90,7 @@ func (r *Buckets[T]) AddBucket(ctx context.Context, bucket types.Bucket[T]) erro
 	selector := bson.M{
 		"userId": bucket.UserId,
 		"type":   r.Type,
+		"time":   bucket.Time,
 	}
 	opts := options.Replace()
 	opts.SetUpsert(true)
@@ -78,7 +101,7 @@ func (r *Buckets[T]) AddBucket(ctx context.Context, bucket types.Bucket[T]) erro
 	return err
 }
 
-func (r *Buckets[T]) ClearInvalidatedBuckets(ctx context.Context, userId string, earliestModified time.Time) (firstData time.Time, err error) {
+func (r *Buckets[B, A]) ClearInvalidatedBuckets(ctx context.Context, userId string, earliestModified time.Time) (firstData time.Time, err error) {
 	selector := bson.M{
 		"userId": userId,
 		"type":   r.Type,
@@ -93,7 +116,7 @@ func (r *Buckets[T]) ClearInvalidatedBuckets(ctx context.Context, userId string,
 	return r.GetNewestRecordTime(ctx, userId)
 }
 
-func (r *Buckets[T]) GetEnd(ctx context.Context, userId string, side int) (*types.Bucket[T], error) {
+func (r *Buckets[B, A]) GetEnd(ctx context.Context, userId string, side int) (*types.Bucket[B, A], error) {
 	if ctx == nil {
 		return nil, errors.New("context is missing")
 	}
@@ -101,7 +124,7 @@ func (r *Buckets[T]) GetEnd(ctx context.Context, userId string, side int) (*type
 		return nil, errors.New("userId is missing")
 	}
 
-	buckets := make([]types.Bucket[T], 1)
+	buckets := make([]types.Bucket[B, A], 1)
 	selector := bson.M{
 		"userId": userId,
 		"type":   r.Type,
@@ -124,7 +147,7 @@ func (r *Buckets[T]) GetEnd(ctx context.Context, userId string, side int) (*type
 	return &buckets[0], nil
 }
 
-func (r *Buckets[T]) GetNewestRecordTime(ctx context.Context, userId string) (time.Time, error) {
+func (r *Buckets[B, A]) GetNewestRecordTime(ctx context.Context, userId string) (time.Time, error) {
 	if ctx == nil {
 		return time.Time{}, errors.New("context is missing")
 	}
@@ -137,10 +160,10 @@ func (r *Buckets[T]) GetNewestRecordTime(ctx context.Context, userId string) (ti
 		return time.Time{}, err
 	}
 
-	return bucket.LastTime, nil
+	return bucket.LastData, nil
 }
 
-func (r *Buckets[T]) GetOldestRecordTime(ctx context.Context, userId string) (time.Time, error) {
+func (r *Buckets[B, A]) GetOldestRecordTime(ctx context.Context, userId string) (time.Time, error) {
 	if ctx == nil {
 		return time.Time{}, errors.New("context is missing")
 	}
@@ -153,10 +176,10 @@ func (r *Buckets[T]) GetOldestRecordTime(ctx context.Context, userId string) (ti
 		return time.Time{}, err
 	}
 
-	return bucket.FirstTime, nil
+	return bucket.FirstData, nil
 }
 
-func (r *Buckets[T]) GetTotalHours(ctx context.Context, userId string) (int, error) {
+func (r *Buckets[B, A]) GetTotalHours(ctx context.Context, userId string) (int, error) {
 	if ctx == nil {
 		return 0, errors.New("context is missing")
 	}
@@ -174,5 +197,5 @@ func (r *Buckets[T]) GetTotalHours(ctx context.Context, userId string) (int, err
 		return 0, err
 	}
 
-	return int(lastBucket.LastTime.Sub(firstBucket.FirstTime).Hours()), nil
+	return int(lastBucket.LastData.Sub(firstBucket.FirstData).Hours()), nil
 }

@@ -89,55 +89,74 @@ type GlucoseBucket struct {
 	LastRecordDuration int `json:"lastRecordDuration,omitempty" bson:"lastRecordDuration,omitempty"`
 }
 
-func (B *GlucoseBucket) finalizeMinutes(wallMinutes float64) {
-	B.Total.Percent = float64(B.Total.Minutes) / wallMinutes
+func (R *GlucoseRanges) finalizeMinutes(wallMinutes float64) {
+	R.Total.Percent = float64(R.Total.Minutes) / wallMinutes
 
-	if (wallMinutes <= minutesPerDay && B.Total.Percent > 0.7) || (wallMinutes > minutesPerDay && B.Total.Minutes > minutesPerDay) {
-		B.VeryLow.Percent = float64(B.VeryLow.Minutes) / wallMinutes
-		B.Low.Percent = float64(B.Low.Minutes) / wallMinutes
-		B.Target.Percent = float64(B.Target.Minutes) / wallMinutes
-		B.High.Percent = float64(B.High.Minutes) / wallMinutes
-		B.VeryHigh.Percent = float64(B.VeryHigh.Minutes) / wallMinutes
-		B.ExtremeHigh.Percent = float64(B.ExtremeHigh.Minutes) / wallMinutes
-		B.AnyLow.Percent = float64(B.VeryLow.Minutes+B.Low.Minutes) / wallMinutes
-		B.AnyHigh.Percent = float64(B.VeryHigh.Minutes+B.High.Minutes) / wallMinutes
+	if (wallMinutes <= minutesPerDay && R.Total.Percent > 0.7) || (wallMinutes > minutesPerDay && R.Total.Minutes > minutesPerDay) {
+		R.VeryLow.Percent = float64(R.VeryLow.Minutes) / wallMinutes
+		R.Low.Percent = float64(R.Low.Minutes) / wallMinutes
+		R.Target.Percent = float64(R.Target.Minutes) / wallMinutes
+		R.High.Percent = float64(R.High.Minutes) / wallMinutes
+		R.VeryHigh.Percent = float64(R.VeryHigh.Minutes) / wallMinutes
+		R.ExtremeHigh.Percent = float64(R.ExtremeHigh.Minutes) / wallMinutes
+		R.AnyLow.Percent = float64(R.VeryLow.Minutes+R.Low.Minutes) / wallMinutes
+		R.AnyHigh.Percent = float64(R.VeryHigh.Minutes+R.High.Minutes) / wallMinutes
 	}
 }
 
-func (B *GlucoseBucket) finalizeRecords() {
-	B.Total.Percent = float64(B.Total.Minutes) / float64(B.Total.Records)
-	B.VeryLow.Percent = float64(B.VeryLow.Minutes) / float64(B.Total.Records)
-	B.Low.Percent = float64(B.Low.Minutes) / float64(B.Total.Records)
-	B.Target.Percent = float64(B.Target.Minutes) / float64(B.Total.Records)
-	B.High.Percent = float64(B.High.Minutes) / float64(B.Total.Records)
-	B.VeryHigh.Percent = float64(B.VeryHigh.Minutes) / float64(B.Total.Records)
-	B.ExtremeHigh.Percent = float64(B.ExtremeHigh.Minutes) / float64(B.Total.Records)
-	B.AnyLow.Percent = float64(B.VeryLow.Minutes+B.Low.Minutes) / float64(B.Total.Records)
-	B.AnyHigh.Percent = float64(B.VeryHigh.Minutes+B.High.Minutes) / float64(B.Total.Records)
+func (R *GlucoseRanges) finalizeRecords() {
+	R.Total.Percent = float64(R.Total.Minutes) / float64(R.Total.Records)
+	R.VeryLow.Percent = float64(R.VeryLow.Minutes) / float64(R.Total.Records)
+	R.Low.Percent = float64(R.Low.Minutes) / float64(R.Total.Records)
+	R.Target.Percent = float64(R.Target.Minutes) / float64(R.Total.Records)
+	R.High.Percent = float64(R.High.Minutes) / float64(R.Total.Records)
+	R.VeryHigh.Percent = float64(R.VeryHigh.Minutes) / float64(R.Total.Records)
+	R.ExtremeHigh.Percent = float64(R.ExtremeHigh.Minutes) / float64(R.Total.Records)
+	R.AnyLow.Percent = float64(R.VeryLow.Minutes+R.Low.Minutes) / float64(R.Total.Records)
+	R.AnyHigh.Percent = float64(R.VeryHigh.Minutes+R.High.Minutes) / float64(R.Total.Records)
 }
 
-func (B *GlucoseBucket) Finalize(shared *BucketShared) {
-	if B.Total.Minutes != 0 {
+func (R *GlucoseRanges) Finalize(shared *BucketShared) {
+	if R.Total.Minutes != 0 {
 		// if our bucket (period, at this point) has minutes
 		wallMinutes := shared.LastData.Sub(shared.FirstData).Minutes()
-		B.finalizeMinutes(wallMinutes)
+		R.finalizeMinutes(wallMinutes)
 	} else {
 		// otherwise, we only have record counts
-		B.finalizeRecords()
+		R.finalizeRecords()
 	}
+}
+
+func (B *GlucoseBucket) Add(bucket *GlucoseBucket) {
+	B.Add(bucket)
 }
 
 type BucketShared struct {
 	UserId    string    `json:"userId" bson:"userId"`
 	Type      string    `json:"type" bson:"type"`
-	Day       time.Time `json:"day" bson:"day"`
+	Time      time.Time `json:"time" bson:"time"`
 	FirstData time.Time `json:"firstTime" bson:"firstTime"`
 	LastData  time.Time `json:"lastTime" bson:"lastTime"`
+}
+
+func (BS *BucketShared) Add(shared *BucketShared) {
+	if shared.FirstData.Before(BS.FirstData) {
+		BS.FirstData = shared.FirstData
+	}
+
+	if shared.LastData.After(BS.LastData) {
+		BS.LastData = shared.LastData
+	}
 }
 
 type Bucket[B BucketDataPt[A], A BucketData] struct {
 	BucketShared
 	Data B `json:"data" bson:"data"`
+}
+
+func (B *Bucket[B, A]) Add(bucket *Bucket[B, A]) {
+	B.Data.Add(bucket.Data)
+	B.BucketShared.Add(&bucket.BucketShared)
 }
 
 type BucketData interface {
@@ -146,25 +165,47 @@ type BucketData interface {
 
 type BucketDataPt[A BucketData] interface {
 	*A
-	Add(new *GlucoseBucket)
-	Finalize(bucket *BucketShared)
-	//CalculateStats(interface{}, *time.Time) (bool, error)
+	Add(bucket *A)
 }
 
 // ContinuousBucket TODO placeholder for generics testing
 type ContinuousBucket GlucoseBucket
 
-//type Bucket[A BucketDataPt[T], T BucketData] struct {
-//	Date           time.Time `json:"date" bson:"date"`
-//	LastRecordTime time.Time `json:"lastRecordTime" bson:"lastRecordTime"`
-//	Type           string    `json:"type" bson:"type"`
-//
-//	Data A `json:"data" bson:"data"`
-//}
+type GlucosePeriod struct {
+	GlucoseRanges
+	state BucketShared
 
-//func CreateBucket[A BucketDataPt[T], T BucketData](t time.Time) *Bucket[A, T] {
-//	bucket := new(Bucket[A, T])
-//	bucket.Date = t
-//	bucket.Data = new(T)
-//	return bucket
-//}
+	HoursWithData int `json:"hoursWithData,omitempty" bson:"hoursWithData,omitempty"`
+	DaysWithData  int `json:"daysWithData,omitempty" bson:"daysWithData,omitempty"`
+
+	AverageGlucose             float64 `json:"averageGlucoseMmol,omitempty" bson:"avgGlucose,omitempty"`
+	GlucoseManagementIndicator float64 `json:"glucoseManagementIndicator,omitempty" bson:"GMI,omitempty"`
+
+	CoefficientOfVariation float64 `json:"coefficientOfVariation,omitempty" bson:"CV,omitempty"`
+	StandardDeviation      float64 `json:"standardDeviation,omitempty" bson:"SD,omitempty"`
+
+	AverageDailyRecords float64 `json:"averageDailyRecords,omitempty" b;son:"avgDailyRecords,omitempty,omitempty"`
+
+	Delta *GlucosePeriod `json:"delta,omitempty" bson:"delta,omitempty"`
+}
+
+func (P GlucosePeriod) Finalize(days int) {
+	P.GlucoseRanges.Finalize(&P.state)
+	P.AverageGlucose = P.Total.Glucose / float64(P.Total.Minutes)
+
+	// we only add GMI if cgm use >70%, otherwise clear it
+	if P.Total.Percent > 0.7 {
+		P.GlucoseManagementIndicator = CalculateGMI(P.AverageGlucose)
+	}
+
+	P.StandardDeviation = math.Sqrt(P.Total.Variance / float64(P.Total.Minutes))
+	P.CoefficientOfVariation = P.StandardDeviation / P.AverageGlucose
+
+	P.AverageDailyRecords = float64(P.Total.Records) / float64(days)
+
+	// TODO HoursWithData
+	// TODO DaysWithData
+	// can it be centralized here? does it have to be in the iteration?
+}
+
+// TODO standardize everything into Add and Finalize at every level
