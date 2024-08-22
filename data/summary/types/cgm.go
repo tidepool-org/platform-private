@@ -3,14 +3,9 @@ package types
 import (
 	"context"
 	"errors"
-	"strconv"
-	"time"
-
-	"github.com/tidepool-org/platform/data/blood/glucose"
 	"github.com/tidepool-org/platform/data/summary/fetcher"
-	glucoseDatum "github.com/tidepool-org/platform/data/types/blood/glucose"
 	"github.com/tidepool-org/platform/data/types/blood/glucose/continuous"
-	"github.com/tidepool-org/platform/pointer"
+	"strconv"
 )
 
 type GlucosePeriods map[string]*GlucosePeriod
@@ -56,62 +51,6 @@ func (s *CGMStats) Update(ctx context.Context, cursor fetcher.DeviceDataCursor) 
 	s.CalculateSummary()
 
 	return nil
-}
-
-func (B *GlucoseBucket) CalculateStats(r any, lastRecordTime *time.Time) (bool, error) {
-	dataRecord, ok := r.(*glucoseDatum.Glucose)
-	if !ok {
-		return false, errors.New("CGM record for calculation is not compatible with Glucose type")
-	}
-
-	// this is a new bucket, use current record as duration reference
-	if B.LastRecordDuration == 0 {
-		B.LastRecordDuration = GetDuration(dataRecord)
-	}
-
-	// calculate blackoutWindow based on duration of previous value
-	blackoutWindow := time.Duration(B.LastRecordDuration)*time.Minute - 10*time.Second
-
-	// Skip record unless we are beyond the blackout window
-	if dataRecord.Time.Sub(*lastRecordTime) > blackoutWindow {
-		normalizedValue := *glucose.NormalizeValueForUnits(dataRecord.Value, pointer.FromAny(glucose.MmolL))
-		duration := GetDuration(dataRecord)
-
-		if normalizedValue < veryLowBloodGlucose {
-			B.VeryLow.Minutes += duration
-			B.VeryLow.Records++
-		} else if normalizedValue > veryHighBloodGlucose {
-			B.VeryHigh.Minutes += duration
-			B.VeryHigh.Records++
-
-			// VeryHigh is inclusive of extreme high, this is intentional
-			if normalizedValue >= extremeHighBloodGlucose {
-				B.ExtremeHigh.Minutes += duration
-				B.ExtremeHigh.Records++
-			}
-		} else if normalizedValue < lowBloodGlucose {
-			B.Low.Minutes += duration
-			B.Low.Records++
-		} else if normalizedValue > highBloodGlucose {
-			B.High.Minutes += duration
-			B.High.Records++
-		} else {
-			B.Target.Minutes += duration
-			B.Target.Records++
-		}
-
-		// this must occur before the counters below as the pre-increment counters are used during calc
-		B.Total.Variance = B.Total.CalculateVariance(normalizedValue, float64(duration))
-
-		B.Total.Minutes += duration
-		B.Total.Records++
-		B.Total.Glucose += normalizedValue * float64(duration)
-		B.LastRecordDuration = duration
-
-		return false, nil
-	}
-
-	return true, nil
 }
 
 func (s *CGMStats) CalculateSummary() {

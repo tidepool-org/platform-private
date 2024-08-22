@@ -1,6 +1,11 @@
 package types
 
 import (
+	"errors"
+	"fmt"
+	"github.com/tidepool-org/platform/data/blood/glucose"
+	glucoseDatum "github.com/tidepool-org/platform/data/types/blood/glucose"
+	"github.com/tidepool-org/platform/pointer"
 	"math"
 	"time"
 )
@@ -18,6 +23,13 @@ type GlucoseRange struct {
 
 func (R *GlucoseRange) Add(new *GlucoseRange) {
 	R.Variance = R.CombineVariance(new)
+	R.Glucose += new.Glucose
+	R.Minutes += new.Minutes
+	R.Records += new.Records
+	// We skip percent here as it has to be calculated relative to other ranges
+}
+
+func (R *GlucoseRange) Update(record glucoseDatum.Glucose) {
 	R.Glucose += new.Glucose
 	R.Minutes += new.Minutes
 	R.Records += new.Records
@@ -131,6 +143,70 @@ func (B *GlucoseBucket) Add(bucket *GlucoseBucket) {
 	B.Add(bucket)
 }
 
+func (B *GlucoseBucket) Update(r any, shared *BucketShared) error {
+	record, ok := r.(*glucoseDatum.Glucose)
+	if !ok {
+		return errors.New("record for calculation is not compatible with Glucose type")
+	}
+
+	if DeviceDataToSummaryTypes[record.Type] != shared.Type {
+		return fmt.Errorf("record for %s calculation is of invald type %s", shared.Type, record.Type)
+	}
+
+	// if this is bgm data, this will return 0
+	duration := GetDuration(record)
+
+	// if we have cgm data, we care about blackout periods
+	if shared.Type == SummaryTypeContinuous {
+		// calculate blackoutWindow based on duration of previous value
+		blackoutWindow := time.Duration(B.LastRecordDuration)*time.Minute - 10*time.Second
+
+		// Skip record if we are within the blackout window
+		if record.Time.Sub(shared.LastData) < blackoutWindow {
+			return nil
+		}
+	}
+
+	normalizedValue := *glucose.NormalizeValueForUnits(record.Value, pointer.FromAny(glucose.MmolL))
+
+	if normalizedValue < veryLowBloodGlucose {
+		B.VeryLow.Minutes += duration
+		B.VeryLow.Records++
+	} else if normalizedValue > veryHighBloodGlucose {
+		B.VeryHigh.Minutes += duration
+		B.VeryHigh.Records++
+
+		// VeryHigh is inclusive of extreme high, this is intentional
+		if normalizedValue >= extremeHighBloodGlucose {
+			B.ExtremeHigh.Minutes += duration
+			B.ExtremeHigh.Records++
+		}
+	} else if normalizedValue < lowBloodGlucose {
+		B.Low.Minutes += duration
+		B.Low.Records++
+	} else if normalizedValue > highBloodGlucose {
+		B.High.Minutes += duration
+		B.High.Records++
+	} else {
+		B.Target.Minutes += duration
+		B.Target.Records++
+	}
+
+	// this must occur before the counters below as the pre-increment counters are used during calc
+	B.Total.Variance = B.Total.CalculateVariance(normalizedValue, float64(duration))
+
+	B.Total.Minutes += duration
+	B.Total.Records++
+	B.Total.Glucose += normalizedValue * float64(duration)
+	B.LastRecordDuration = duration
+	shared.LastData = *record.Time
+
+	return nil
+}
+
+// ContinuousBucket TODO placeholder for generics testing
+type ContinuousBucket GlucoseBucket
+
 type BucketShared struct {
 	UserId    string    `json:"userId" bson:"userId"`
 	Type      string    `json:"type" bson:"type"`
@@ -149,16 +225,6 @@ func (BS *BucketShared) Add(shared *BucketShared) {
 	}
 }
 
-type Bucket[B BucketDataPt[A], A BucketData] struct {
-	BucketShared
-	Data B `json:"data" bson:"data"`
-}
-
-func (B *Bucket[B, A]) Add(bucket *Bucket[B, A]) {
-	B.Data.Add(bucket.Data)
-	B.BucketShared.Add(&bucket.BucketShared)
-}
-
 type BucketData interface {
 	GlucoseBucket | ContinuousBucketData
 }
@@ -166,10 +232,45 @@ type BucketData interface {
 type BucketDataPt[A BucketData] interface {
 	*A
 	Add(bucket *A)
+	Update(record any, shared *BucketShared) error
 }
 
-// ContinuousBucket TODO placeholder for generics testing
-type ContinuousBucket GlucoseBucket
+type Bucket[B BucketDataPt[A], A BucketData] struct {
+	BucketShared
+	Data B `json:"data" bson:"data"`
+}
+
+func NewBucket[B BucketDataPt[A], A BucketData](userId string, date time.Time, typ string) Bucket[B, A] {
+	return Bucket[B, A]{
+		BucketShared: BucketShared{
+			UserId: userId,
+			Type:   typ,
+			Time:   date,
+		},
+		Data: new(A),
+	}
+}
+
+func NewCGMBucket[B BucketDataPt[A], A BucketData](userId string, date time.Time) Bucket[B, A] {
+	return NewBucket[B, A](userId, date, SummaryTypeCGM)
+}
+
+func NewBGMBucket[B BucketDataPt[A], A BucketData](userId string, date time.Time) Bucket[B, A] {
+	return NewBucket[B, A](userId, date, SummaryTypeBGM)
+}
+
+func NewContinuousBucket[B BucketDataPt[A], A BucketData](userId string, date time.Time) Bucket[B, A] {
+	return NewBucket[B, A](userId, date, SummaryTypeContinuous)
+}
+
+func (B *Bucket[B, A]) Add(bucket *Bucket[B, A]) {
+	B.Data.Add(bucket.Data)
+	B.BucketShared.Add(&bucket.BucketShared)
+}
+
+func (B *Bucket[B, A]) Update(record any) error {
+	return B.Data.Update(record, &B.BucketShared)
+}
 
 type GlucosePeriod struct {
 	GlucoseRanges
@@ -208,4 +309,6 @@ func (P GlucosePeriod) Finalize(days int) {
 	// can it be centralized here? does it have to be in the iteration?
 }
 
-// TODO standardize everything into Add and Finalize at every level
+// TODO use Add for adding like-type objects
+// TODO use Update to add metrics to existing object
+// TODO use Finalize to calculate final metrics after add/update

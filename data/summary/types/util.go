@@ -1,6 +1,7 @@
 package types
 
 import (
+	"github.com/tidepool-org/platform/data/types/blood/glucose/continuous"
 	"math"
 	"strings"
 	"time"
@@ -12,6 +13,10 @@ import (
 
 // GetDuration assumes all except freestyle is 5 minutes
 func GetDuration(dataSet *glucoseDatum.Glucose) int {
+	if dataSet.Type != continuous.Type {
+		// non-continuous has no duration
+		return 0
+	}
 	if dataSet.DeviceID != nil {
 		if strings.Contains(*dataSet.DeviceID, "AbbottFreeStyleLibre3") {
 			return 5

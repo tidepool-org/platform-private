@@ -18,7 +18,7 @@ import (
 const (
 	SummaryTypeCGM        = "cgm"
 	SummaryTypeBGM        = "bgm"
-	SummaryTypeContinuous = "continuous"
+	SummaryTypeContinuous = "con"
 	SchemaVersion         = 4
 
 	lowBloodGlucose         = 3.9
@@ -64,36 +64,24 @@ type Config struct {
 
 type Dates struct {
 	LastUpdatedDate   time.Time `json:"lastUpdatedDate" bson:"lastUpdatedDate"`
-	LastUpdatedReason []string  `json:"lastUpdatedReason" bson:"lastUpdatedReason"`
+	LastUpdatedReason []string  `json:"lastUpdatedReason,omitempty" bson:"lastUpdatedReason,omitempty"`
+	LastUploadDate    time.Time `json:"lastUploadDate,omitempty" bson:"lastUploadDate,omitempty"`
 
-	HasLastUploadDate bool       `json:"hasLastUploadDate" bson:"hasLastUploadDate"`
-	LastUploadDate    *time.Time `json:"lastUploadDate" bson:"lastUploadDate"`
+	FirstData time.Time `json:"firstData,omitempty" bson:"firstData,omitempty"`
+	LastData  time.Time `json:"lastData,omitempty" bson:"lastData,omitempty"`
 
-	HasFirstData bool       `json:"hasFirstData" bson:"hasFirstData"`
-	FirstData    *time.Time `json:"firstData" bson:"firstData"`
-
-	HasLastData bool       `json:"hasLastData" bson:"hasLastData"`
-	LastData    *time.Time `json:"lastData" bson:"lastData"`
-
-	HasOutdatedSince bool       `json:"hasOutdatedSince" bson:"hasOutdatedSince"`
-	OutdatedSince    *time.Time `json:"outdatedSince" bson:"outdatedSince"`
-	OutdatedReason   []string   `json:"outdatedReason" bson:"outdatedReason"`
+	OutdatedSince  *time.Time `json:"outdatedSince,omitempty" bson:"outdatedSince,omitempty"`
+	OutdatedReason []string   `json:"outdatedReason,omitempty" bson:"outdatedReason,omitempty"`
 }
 
 func (d *Dates) Update(status *data.UserDataStatus, firstBucketDate time.Time) {
 	d.LastUpdatedDate = status.NextLastUpdated
 	d.LastUpdatedReason = d.OutdatedReason
+	d.LastUploadDate = status.LastUpload
 
-	d.HasLastUploadDate = true
-	d.LastUploadDate = &status.LastUpload
+	d.FirstData = firstBucketDate
+	d.LastData = status.LastData
 
-	d.HasFirstData = true
-	d.FirstData = &firstBucketDate
-
-	d.HasLastData = true
-	d.LastData = &status.LastData
-
-	d.HasOutdatedSince = false
 	d.OutdatedSince = nil
 	d.OutdatedReason = nil
 }
@@ -145,33 +133,17 @@ func (s *Summary[A, T]) SetOutdated(reason string) {
 
 	if s.Dates.OutdatedSince == nil {
 		s.Dates.OutdatedSince = pointer.FromAny(time.Now().Truncate(time.Millisecond).UTC())
-		s.Dates.HasOutdatedSince = true
 	}
 }
 
 func (s *Summary[A, T]) SetNotOutdated() {
 	s.Dates.OutdatedReason = nil
 	s.Dates.OutdatedSince = nil
-	s.Dates.HasOutdatedSince = false
 }
 
 func NewDates() Dates {
 	return Dates{
-		LastUpdatedDate:   time.Time{},
-		LastUpdatedReason: nil,
-
-		HasLastUploadDate: false,
-		LastUploadDate:    nil,
-
-		HasFirstData: false,
-		FirstData:    nil,
-
-		HasLastData: false,
-		LastData:    nil,
-
-		HasOutdatedSince: false,
-		OutdatedSince:    nil,
-		OutdatedReason:   nil,
+		LastUpdatedDate: time.Time{},
 	}
 }
 
@@ -197,27 +169,9 @@ func GetDeviceDataTypeStrings[A StatsPt[T], T Stats]() []string {
 	return s.Stats.GetDeviceDataTypes()
 }
 
-//type Period interface {
-//	BGMPeriod | GlucosePeriod
-//}
-
-func AddBin[T BucketData](buckets *[]*Bucket[T], newBucket *Bucket[T]) error {
-	if len(*buckets) == 0 {
-		*buckets = append(*buckets, newBucket)
-		return nil
-	}
-
-	if lastBucket := (*buckets)[len(*buckets)-1]; newBucket.Date.After(lastBucket.Date) {
-		return addBinAfter(buckets, newBucket)
-	} else if firstBucket := (*buckets)[0]; newBucket.Date.Before(firstBucket.Date) {
-		return addBinBefore(buckets, newBucket)
-	}
-	return replaceBin(buckets, newBucket)
-}
-
 func AddData[A BucketDataPt[T], T BucketData](buckets *[]*Bucket[A, T], userData []data.Datum) error {
 	previousPeriod := time.Time{}
-	var newBucket *Bucket[T]
+	var newBucket *Bucket[A, T]
 
 	for _, r := range userData {
 		recordTime := r.GetTime().UTC()
@@ -242,8 +196,8 @@ func AddData[A BucketDataPt[T], T BucketData](buckets *[]*Bucket[A, T], userData
 			// pull stats if they already exist
 			// we assume the list is fully populated with empty hours for any gaps, so the length should be predictable
 			if len(*buckets) > 0 {
-				firstBucketHour = (*buckets)[0].Date
-				lastBucketHour = (*buckets)[len(*buckets)-1].Date
+				firstBucketHour = (*buckets)[0].Time
+				lastBucketHour = (*buckets)[len(*buckets)-1].Time
 
 				// if we need to look for an existing bucket
 				if !currentPeriod.After(lastBucketHour) && !currentPeriod.Before(firstBucketHour) {
@@ -251,7 +205,7 @@ func AddData[A BucketDataPt[T], T BucketData](buckets *[]*Bucket[A, T], userData
 
 					if offset < len(*buckets) {
 						newBucket = (*buckets)[offset]
-						if !newBucket.Date.Equal(currentPeriod) {
+						if !newBucket.Time.Equal(currentPeriod) {
 							return fmt.Errorf("potentially damaged buckets, offset jump did not find intended record. Found %s, wanted %s", newBucket.Date, currentPeriod)
 						}
 					}
@@ -265,24 +219,24 @@ func AddData[A BucketDataPt[T], T BucketData](buckets *[]*Bucket[A, T], userData
 			}
 
 			// if on fresh bucket, pull LastRecordTime from previous bucket if possible
-			if newBucket.LastRecordTime.IsZero() && len(*buckets) > 0 {
+			if newBucket.LastData.IsZero() && len(*buckets) > 0 {
 				if offset != -1 && offset+1 < len(*buckets) {
-					newBucket.LastRecordTime = (*buckets)[offset-1].LastRecordTime
-				} else if !newBucket.Date.Before(firstBucketHour) {
-					newBucket.LastRecordTime = (*buckets)[len(*buckets)-1].LastRecordTime
+					newBucket.LastData = (*buckets)[offset-1].LastData
+				} else if !newBucket.Time.Before(firstBucketHour) {
+					newBucket.LastData = (*buckets)[len(*buckets)-1].LastData
 				}
 			}
 		}
 
 		previousPeriod = currentPeriod
 
-		skipped, err := newBucket.Data.CalculateStats(r, &newBucket.LastRecordTime)
+		skipped, err := newBucket.Data.CalculateStats(r, &newBucket.LastData)
 
 		if err != nil {
 			return err
 		}
 		if !skipped {
-			newBucket.LastRecordTime = recordTime
+			newBucket.LastData = recordTime
 		}
 	}
 
