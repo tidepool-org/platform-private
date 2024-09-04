@@ -2,7 +2,6 @@ package types
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	mapset "github.com/deckarep/golang-set/v2"
@@ -90,23 +89,26 @@ type Stats interface {
 	CGMStats | BGMStats | ContinuousStats
 }
 
-type StatsPt[T Stats] interface {
+type StatsPt[T Stats, P BucketDataPt[B], B BucketData] interface {
 	*T
 	GetType() string
 	GetDeviceDataTypes() []string
 	Init()
-	Update(context.Context, fetcher.DeviceDataCursor) error
+	Update(context.Context, SummaryShared, fetcher.BucketFetcher[P, B], fetcher.DeviceDataCursor) error
 }
 
-type Summary[A StatsPt[T], T Stats] struct {
+type SummaryShared struct {
 	ID     primitive.ObjectID `json:"-" bson:"_id,omitempty"`
 	Type   string             `json:"type" bson:"type"`
 	UserID string             `json:"userId" bson:"userId"`
+	Config Config             `json:"config" bson:"config"`
+	Dates  Dates              `json:"dates" bson:"dates"`
+}
 
-	Config Config `json:"config" bson:"config"`
+type Summary[A StatsPt[T, P, B], P BucketDataPt[B], T Stats, B BucketData] struct {
+	SummaryShared
 
-	Dates Dates `json:"dates" bson:"dates"`
-	Stats A     `json:"stats" bson:"stats"`
+	Stats A `json:"stats" bson:"stats"`
 }
 
 func NewConfig() Config {
@@ -119,14 +121,14 @@ func NewConfig() Config {
 	}
 }
 
-func (s *Summary[A, T]) SetOutdated(reason string) {
+func (s *Summary[A, P, T, B]) SetOutdated(reason string) {
 	set := mapset.NewSet[string](reason)
 	if len(s.Dates.OutdatedReason) > 0 {
 		set.Append(s.Dates.OutdatedReason...)
 	}
 
 	if reason == OutdatedReasonSchemaMigration {
-		*s = *Create[A](s.UserID)
+		*s = *Create[A, P](s.UserID)
 	}
 
 	s.Dates.OutdatedReason = set.ToSlice()
@@ -136,7 +138,7 @@ func (s *Summary[A, T]) SetOutdated(reason string) {
 	}
 }
 
-func (s *Summary[A, T]) SetNotOutdated() {
+func (s *Summary[A, T, P, B]) SetNotOutdated() {
 	s.Dates.OutdatedReason = nil
 	s.Dates.OutdatedSince = nil
 }
@@ -147,8 +149,8 @@ func NewDates() Dates {
 	}
 }
 
-func Create[A StatsPt[T], T Stats](userId string) *Summary[A, T] {
-	s := new(Summary[A, T])
+func Create[A StatsPt[T, P, B], P BucketDataPt[B], T Stats, B BucketData](userId string) *Summary[A, P, T, B] {
+	s := new(Summary[A, P, T, B])
 	s.UserID = userId
 	s.Stats = new(T)
 	s.Stats.Init()
@@ -159,96 +161,14 @@ func Create[A StatsPt[T], T Stats](userId string) *Summary[A, T] {
 	return s
 }
 
-func GetTypeString[A StatsPt[T], T Stats]() string {
-	s := new(Summary[A, T])
+func GetTypeString[A StatsPt[T, P, B], T Stats, P BucketDataPt[B], B BucketData]() string {
+	s := new(Summary[A, P, T, B])
 	return s.Stats.GetType()
 }
 
-func GetDeviceDataTypeStrings[A StatsPt[T], T Stats]() []string {
-	s := new(Summary[A, T])
+func GetDeviceDataTypeStrings[A StatsPt[T, P, B], P BucketDataPt[B], T Stats, B BucketData]() []string {
+	s := new(Summary[A, P, T, B])
 	return s.Stats.GetDeviceDataTypes()
-}
-
-func AddData[A BucketDataPt[T], T BucketData](buckets *[]*Bucket[A, T], userData []data.Datum) error {
-	previousPeriod := time.Time{}
-	var newBucket *Bucket[A, T]
-
-	for _, r := range userData {
-		recordTime := r.GetTime().UTC()
-
-		// truncate time is not timezone/DST safe here, even if we do expect UTC
-		currentPeriod := recordTime.Truncate(time.Hour)
-
-		// store stats for the period, if we are now on the next period
-		if !previousPeriod.IsZero() && currentPeriod.After(previousPeriod) {
-			err := AddBin(buckets, newBucket)
-			if err != nil {
-				return err
-			}
-			newBucket = nil
-		}
-
-		if newBucket == nil {
-			offset := -1
-			var firstBucketHour time.Time
-			var lastBucketHour time.Time
-
-			// pull stats if they already exist
-			// we assume the list is fully populated with empty hours for any gaps, so the length should be predictable
-			if len(*buckets) > 0 {
-				firstBucketHour = (*buckets)[0].Time
-				lastBucketHour = (*buckets)[len(*buckets)-1].Time
-
-				// if we need to look for an existing bucket
-				if !currentPeriod.After(lastBucketHour) && !currentPeriod.Before(firstBucketHour) {
-					offset = int(currentPeriod.Sub(firstBucketHour).Hours())
-
-					if offset < len(*buckets) {
-						newBucket = (*buckets)[offset]
-						if !newBucket.Time.Equal(currentPeriod) {
-							return fmt.Errorf("potentially damaged buckets, offset jump did not find intended record. Found %s, wanted %s", newBucket.Date, currentPeriod)
-						}
-					}
-
-				}
-			}
-
-			// we still don't have a bucket, make a new one.
-			if newBucket == nil {
-				newBucket = CreateBucket[A](currentPeriod)
-			}
-
-			// if on fresh bucket, pull LastRecordTime from previous bucket if possible
-			if newBucket.LastData.IsZero() && len(*buckets) > 0 {
-				if offset != -1 && offset+1 < len(*buckets) {
-					newBucket.LastData = (*buckets)[offset-1].LastData
-				} else if !newBucket.Time.Before(firstBucketHour) {
-					newBucket.LastData = (*buckets)[len(*buckets)-1].LastData
-				}
-			}
-		}
-
-		previousPeriod = currentPeriod
-
-		skipped, err := newBucket.Data.CalculateStats(r, &newBucket.LastData)
-
-		if err != nil {
-			return err
-		}
-		if !skipped {
-			newBucket.LastData = recordTime
-		}
-	}
-
-	// store any partial bucket
-	if newBucket != nil {
-		err := AddBin(buckets, newBucket)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 func (d *Dates) Reset() {

@@ -2,6 +2,7 @@ package fetcher
 
 import (
 	"context"
+	"github.com/tidepool-org/platform/data/summary/types"
 	"time"
 
 	"go.mongodb.org/mongo-driver/mongo"
@@ -24,4 +25,8 @@ type DeviceDataFetcher interface {
 	GetLastUpdatedForUser(ctx context.Context, userId string, typ []string, lastUpdated time.Time) (*data.UserDataStatus, error)
 	GetDataRange(ctx context.Context, userId string, typ []string, status *data.UserDataStatus) (*mongo.Cursor, error)
 	DistinctUserIDs(ctx context.Context, typ []string) ([]string, error)
+}
+
+type BucketFetcher[B types.BucketDataPt[A], A types.BucketData] interface {
+	GetBuckets(ctx context.Context, userId string, startTime, endTime time.Time) (map[time.Time]types.Bucket[B, A], error)
 }

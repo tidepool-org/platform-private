@@ -3,9 +3,10 @@ package types
 import (
 	"errors"
 	"fmt"
+	"github.com/tidepool-org/platform/data"
 	"github.com/tidepool-org/platform/data/blood/glucose"
 	glucoseDatum "github.com/tidepool-org/platform/data/types/blood/glucose"
-	"github.com/tidepool-org/platform/pointer"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"math"
 	"time"
 )
@@ -29,11 +30,13 @@ func (R *GlucoseRange) Add(new *GlucoseRange) {
 	// We skip percent here as it has to be calculated relative to other ranges
 }
 
-func (R *GlucoseRange) Update(record glucoseDatum.Glucose) {
-	R.Glucose += new.Glucose
-	R.Minutes += new.Minutes
-	R.Records += new.Records
-	// We skip percent here as it has to be calculated relative to other ranges
+func (R *GlucoseRange) Update(value float64, duration int) {
+	// this must occur before the counters below as the pre-increment counters are used during calc
+	R.Variance = R.CalculateVariance(value, float64(duration))
+
+	R.Glucose += value
+	R.Minutes += duration
+	R.Records++
 }
 
 // CombineVariance Implemented using https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm
@@ -139,11 +142,34 @@ func (R *GlucoseRanges) Finalize(shared *BucketShared) {
 	}
 }
 
+func (R *GlucoseRanges) Update(record glucoseDatum.Glucose, duration int) {
+	normalizedValue := *glucose.NormalizeValueForUnits(record.Value, record.Units)
+
+	if normalizedValue < veryLowBloodGlucose {
+		R.VeryLow.Update(0, duration)
+	} else if normalizedValue > veryHighBloodGlucose {
+		R.VeryHigh.Update(0, duration)
+
+		// VeryHigh is inclusive of extreme high, this is intentional
+		if normalizedValue >= extremeHighBloodGlucose {
+			R.ExtremeHigh.Update(0, duration)
+		}
+	} else if normalizedValue < lowBloodGlucose {
+		R.Low.Update(0, duration)
+	} else if normalizedValue > highBloodGlucose {
+		R.High.Update(0, duration)
+	} else {
+		R.Target.Update(0, duration)
+	}
+
+	R.Total.Update(normalizedValue*float64(duration), duration)
+}
+
 func (B *GlucoseBucket) Add(bucket *GlucoseBucket) {
 	B.Add(bucket)
 }
 
-func (B *GlucoseBucket) Update(r any, shared *BucketShared) error {
+func (B *GlucoseBucket) Update(r data.Datum, shared *BucketShared) error {
 	record, ok := r.(*glucoseDatum.Glucose)
 	if !ok {
 		return errors.New("record for calculation is not compatible with Glucose type")
@@ -153,7 +179,7 @@ func (B *GlucoseBucket) Update(r any, shared *BucketShared) error {
 		return fmt.Errorf("record for %s calculation is of invald type %s", shared.Type, record.Type)
 	}
 
-	// if this is bgm data, this will return 0
+	// if this is bgm data, this will return 1
 	duration := GetDuration(record)
 
 	// if we have cgm data, we care about blackout periods
@@ -167,37 +193,8 @@ func (B *GlucoseBucket) Update(r any, shared *BucketShared) error {
 		}
 	}
 
-	normalizedValue := *glucose.NormalizeValueForUnits(record.Value, pointer.FromAny(glucose.MmolL))
+	B.GlucoseRanges.Update(*record, duration)
 
-	if normalizedValue < veryLowBloodGlucose {
-		B.VeryLow.Minutes += duration
-		B.VeryLow.Records++
-	} else if normalizedValue > veryHighBloodGlucose {
-		B.VeryHigh.Minutes += duration
-		B.VeryHigh.Records++
-
-		// VeryHigh is inclusive of extreme high, this is intentional
-		if normalizedValue >= extremeHighBloodGlucose {
-			B.ExtremeHigh.Minutes += duration
-			B.ExtremeHigh.Records++
-		}
-	} else if normalizedValue < lowBloodGlucose {
-		B.Low.Minutes += duration
-		B.Low.Records++
-	} else if normalizedValue > highBloodGlucose {
-		B.High.Minutes += duration
-		B.High.Records++
-	} else {
-		B.Target.Minutes += duration
-		B.Target.Records++
-	}
-
-	// this must occur before the counters below as the pre-increment counters are used during calc
-	B.Total.Variance = B.Total.CalculateVariance(normalizedValue, float64(duration))
-
-	B.Total.Minutes += duration
-	B.Total.Records++
-	B.Total.Glucose += normalizedValue * float64(duration)
 	B.LastRecordDuration = duration
 	shared.LastData = *record.Time
 
@@ -208,11 +205,12 @@ func (B *GlucoseBucket) Update(r any, shared *BucketShared) error {
 type ContinuousBucket GlucoseBucket
 
 type BucketShared struct {
-	UserId    string    `json:"userId" bson:"userId"`
-	Type      string    `json:"type" bson:"type"`
-	Time      time.Time `json:"time" bson:"time"`
-	FirstData time.Time `json:"firstTime" bson:"firstTime"`
-	LastData  time.Time `json:"lastTime" bson:"lastTime"`
+	ID        primitive.ObjectID `json:"-" bson:"_id,omitempty"`
+	UserId    string             `json:"userId" bson:"userId"`
+	Type      string             `json:"type" bson:"type"`
+	Time      time.Time          `json:"time" bson:"time"`
+	FirstData time.Time          `json:"firstTime" bson:"firstTime"`
+	LastData  time.Time          `json:"lastTime" bson:"lastTime"`
 }
 
 func (BS *BucketShared) Add(shared *BucketShared) {
@@ -232,7 +230,7 @@ type BucketData interface {
 type BucketDataPt[A BucketData] interface {
 	*A
 	Add(bucket *A)
-	Update(record any, shared *BucketShared) error
+	Update(record data.Datum, shared *BucketShared) error
 }
 
 type Bucket[B BucketDataPt[A], A BucketData] struct {
@@ -240,8 +238,8 @@ type Bucket[B BucketDataPt[A], A BucketData] struct {
 	Data B `json:"data" bson:"data"`
 }
 
-func NewBucket[B BucketDataPt[A], A BucketData](userId string, date time.Time, typ string) Bucket[B, A] {
-	return Bucket[B, A]{
+func NewBucket[B BucketDataPt[A], A BucketData](userId string, date time.Time, typ string) *Bucket[B, A] {
+	return &Bucket[B, A]{
 		BucketShared: BucketShared{
 			UserId: userId,
 			Type:   typ,
@@ -251,25 +249,53 @@ func NewBucket[B BucketDataPt[A], A BucketData](userId string, date time.Time, t
 	}
 }
 
-func NewCGMBucket[B BucketDataPt[A], A BucketData](userId string, date time.Time) Bucket[B, A] {
-	return NewBucket[B, A](userId, date, SummaryTypeCGM)
-}
-
-func NewBGMBucket[B BucketDataPt[A], A BucketData](userId string, date time.Time) Bucket[B, A] {
-	return NewBucket[B, A](userId, date, SummaryTypeBGM)
-}
-
-func NewContinuousBucket[B BucketDataPt[A], A BucketData](userId string, date time.Time) Bucket[B, A] {
-	return NewBucket[B, A](userId, date, SummaryTypeContinuous)
-}
+//func NewCGMBucket[B BucketDataPt[A], A BucketData](userId string, date time.Time) *Bucket[B, A] {
+//	return NewBucket[B, A](userId, date, SummaryTypeCGM)
+//}
+//
+//func NewBGMBucket[B BucketDataPt[A], A BucketData](userId string, date time.Time) *Bucket[B, A] {
+//	return NewBucket[B, A](userId, date, SummaryTypeBGM)
+//}
+//
+//func NewContinuousBucket[B BucketDataPt[A], A BucketData](userId string, date time.Time) *Bucket[B, A] {
+//	return NewBucket[B, A](userId, date, SummaryTypeContinuous)
+//}
 
 func (B *Bucket[B, A]) Add(bucket *Bucket[B, A]) {
 	B.Data.Add(bucket.Data)
 	B.BucketShared.Add(&bucket.BucketShared)
 }
 
-func (B *Bucket[B, A]) Update(record any) error {
+func (B *Bucket[B, A]) Update(record data.Datum) error {
 	return B.Data.Update(record, &B.BucketShared)
+}
+
+type BucketsByTime[B BucketDataPt[A], A BucketData] map[time.Time]*Bucket[B, A]
+
+func (BT BucketsByTime[B, A]) AddData(userId string, typ string, userData []data.Datum) error {
+	for _, r := range userData {
+		// truncate time is not timezone/DST safe here, even if we do expect UTC, never truncate non-utc
+		recordHour := r.GetTime().UTC().Truncate(time.Hour)
+
+		// OPTIMIZATION this could check if recordHour equal to previous hour, to save a map lookup, probably saves 0ms
+		if _, ok := BT[recordHour]; !ok {
+			// we don't already have a bucket for this data
+			BT[recordHour] = NewBucket[B](userId, recordHour, typ)
+
+			// fresh bucket, pull LastData from previous hour if possible for dedup
+			if _, ok = BT[recordHour.Add(-time.Hour)]; ok {
+				BT[recordHour].BucketShared.LastData = BT[recordHour.Add(-time.Hour)].LastData
+			}
+		}
+
+		err := BT[recordHour].Update(r)
+		if err != nil {
+			return err
+		}
+
+	}
+
+	return nil
 }
 
 type GlucosePeriod struct {

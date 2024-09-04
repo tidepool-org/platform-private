@@ -6,6 +6,7 @@ import (
 	"github.com/tidepool-org/platform/data/summary/fetcher"
 	"github.com/tidepool-org/platform/data/types/blood/glucose/continuous"
 	"strconv"
+	"time"
 )
 
 type GlucosePeriods map[string]*GlucosePeriod
@@ -30,8 +31,10 @@ func (s *CGMStats) Init() {
 	s.TotalHours = 0
 }
 
-func (s *CGMStats) Update(ctx context.Context, cursor fetcher.DeviceDataCursor) error {
+func (s *CGMStats) Update(ctx context.Context, shared SummaryShared, bucketsFetcher fetcher.BucketFetcher[*GlucoseBucket, GlucoseBucket], cursor fetcher.DeviceDataCursor) error {
 	hasMoreData := true
+	var buckets map[string]Bucket[*GlucoseBucket, GlucoseBucket]
+
 	for hasMoreData {
 		userData, err := cursor.GetNextBatch(ctx)
 		if errors.Is(err, fetcher.ErrCursorExhausted) {
@@ -40,8 +43,14 @@ func (s *CGMStats) Update(ctx context.Context, cursor fetcher.DeviceDataCursor) 
 			return err
 		}
 
+		// TODO add overall buckets add function which puts data in buckets
+		// alias "buckets" map type?
+
 		if len(userData) > 0 {
-			err = AddData(&s.Buckets, userData)
+			startTime := userData[0].GetTime().UTC().Truncate(time.Hour)
+			endTime := userData[len(userData)].GetTime().UTC().Truncate(time.Hour)
+			buckets, err = bucketsFetcher.GetBuckets(ctx, shared.UserID, startTime, endTime)
+			err = AddData(buckets, userData)
 			if err != nil {
 				return err
 			}
@@ -58,7 +67,7 @@ func (s *CGMStats) CalculateSummary() {
 	// currently only supports day precision
 	nextStopPoint := 0
 	nextOffsetStopPoint := 0
-	totalStats := GlucosePeriod{}
+	totalStats := 0
 	totalOffsetStats := GlucosePeriod{}
 	dayCounted := false
 	offsetDayCounted := false

@@ -24,7 +24,7 @@ func NewBuckets[B types.BucketDataPt[A], A types.BucketData](delegate *storeStru
 	}
 }
 
-func (r *Buckets[B, A]) GetBuckets(ctx context.Context, userId string) ([]types.Bucket[B, A], error) {
+func (r *Buckets[B, A]) GetBuckets(ctx context.Context, userId string, startTime, endTime time.Time) (map[time.Time]types.Bucket[B, A], error) {
 	if ctx == nil {
 		return nil, errors.New("context is missing")
 	}
@@ -32,17 +32,20 @@ func (r *Buckets[B, A]) GetBuckets(ctx context.Context, userId string) ([]types.
 		return nil, errors.New("userId is missing")
 	}
 
-	buckets := make([]types.Bucket[B, A], 0)
+	buckets := make([]types.Bucket[B, A], 1)
+	transformed := make(map[time.Time]types.Bucket[B, A], 1)
+
 	selector := bson.M{
 		"userId": userId,
 		"type":   r.Type,
+		"time":   bson.M{"$gte": startTime, "$lte": endTime},
 	}
 	opts := options.Find()
 	opts.SetSort(bson.D{{Key: "time", Value: 1}})
 
 	cur, err := r.Find(ctx, selector, opts)
 	if errors.Is(err, mongo.ErrNoDocuments) {
-		return nil, nil
+		return transformed, nil
 	} else if err != nil {
 		return nil, fmt.Errorf("unable to get buckets: %w", err)
 	}
@@ -51,7 +54,11 @@ func (r *Buckets[B, A]) GetBuckets(ctx context.Context, userId string) ([]types.
 		return nil, fmt.Errorf("unable to decode buckets: %w", err)
 	}
 
-	return buckets, nil
+	for _, bucket := range buckets {
+		transformed[bucket.Time] = bucket
+	}
+
+	return transformed, nil
 }
 
 func (r *Buckets[B, A]) TrimExcessBuckets(ctx context.Context, userId string) error {

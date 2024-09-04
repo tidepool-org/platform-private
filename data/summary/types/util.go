@@ -15,7 +15,7 @@ import (
 func GetDuration(dataSet *glucoseDatum.Glucose) int {
 	if dataSet.Type != continuous.Type {
 		// non-continuous has no duration
-		return 0
+		return 1
 	}
 	if dataSet.DeviceID != nil {
 		if strings.Contains(*dataSet.DeviceID, "AbbottFreeStyleLibre3") {
