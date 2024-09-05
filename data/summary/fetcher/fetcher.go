@@ -28,5 +28,6 @@ type DeviceDataFetcher interface {
 }
 
 type BucketFetcher[B types.BucketDataPt[A], A types.BucketData] interface {
-	GetBuckets(ctx context.Context, userId string, startTime, endTime time.Time) (map[time.Time]types.Bucket[B, A], error)
+	GetBuckets(ctx context.Context, userId string, startTime, endTime time.Time) (types.BucketsByTime[B, A], error)
+	WriteModifiedBuckets(ctx context.Context, startTime time.Time, buckets types.BucketsByTime[B, A]) error
 }

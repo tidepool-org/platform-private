@@ -3,6 +3,7 @@ package types
 import (
 	"context"
 	"errors"
+	"github.com/tidepool-org/platform/data"
 	"github.com/tidepool-org/platform/data/summary/fetcher"
 	"github.com/tidepool-org/platform/data/types/blood/glucose/continuous"
 	"strconv"
@@ -32,32 +33,46 @@ func (s *CGMStats) Init() {
 }
 
 func (s *CGMStats) Update(ctx context.Context, shared SummaryShared, bucketsFetcher fetcher.BucketFetcher[*GlucoseBucket, GlucoseBucket], cursor fetcher.DeviceDataCursor) error {
+	// move all of this to a generic method? fetcher interface?
+
 	hasMoreData := true
-	var buckets map[string]Bucket[*GlucoseBucket, GlucoseBucket]
+	var buckets BucketsByTime[*GlucoseBucket, GlucoseBucket]
+	var err error
+	var userData []data.Datum
+	var startTime time.Time
+	var endTime time.Time
 
 	for hasMoreData {
-		userData, err := cursor.GetNextBatch(ctx)
+		userData, err = cursor.GetNextBatch(ctx)
 		if errors.Is(err, fetcher.ErrCursorExhausted) {
 			hasMoreData = false
 		} else if err != nil {
 			return err
 		}
 
-		// TODO add overall buckets add function which puts data in buckets
-		// alias "buckets" map type?
-
 		if len(userData) > 0 {
-			startTime := userData[0].GetTime().UTC().Truncate(time.Hour)
-			endTime := userData[len(userData)].GetTime().UTC().Truncate(time.Hour)
+			startTime = userData[0].GetTime().UTC().Truncate(time.Hour)
+			endTime = userData[len(userData)].GetTime().UTC().Truncate(time.Hour)
 			buckets, err = bucketsFetcher.GetBuckets(ctx, shared.UserID, startTime, endTime)
-			err = AddData(buckets, userData)
 			if err != nil {
 				return err
 			}
+
+			err = buckets.Update(shared.UserID, shared.Type, userData)
+			if err != nil {
+				return err
+			}
+
+			err = bucketsFetcher.WriteModifiedBuckets(ctx, shared.Dates.LastUpdatedDate, buckets)
+			if err != nil {
+				return err
+			}
+
 		}
 	}
 
 	s.CalculateSummary()
+	s.CalculateDelta()
 
 	return nil
 }
@@ -135,8 +150,6 @@ func (s *CGMStats) CalculateSummary() {
 	}
 
 	s.TotalHours = len(s.Buckets)
-
-	s.CalculateDelta()
 }
 
 func (s *CGMStats) CalculateDelta() {
@@ -163,7 +176,7 @@ func (s *CGMStats) CalculateDelta() {
 
 func (s *CGMStats) CalculatePeriod(i int, offset bool, period GlucosePeriod) {
 	// We don't make a copy of period, as the struct has no pointers... right? you didn't add any pointers right?
-	period.Finalize()
+	period.Finalize(i)
 
 	if offset {
 		s.OffsetPeriods[strconv.Itoa(i)+"d"] = &period

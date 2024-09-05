@@ -24,7 +24,7 @@ func NewBuckets[B types.BucketDataPt[A], A types.BucketData](delegate *storeStru
 	}
 }
 
-func (r *Buckets[B, A]) GetBuckets(ctx context.Context, userId string, startTime, endTime time.Time) (map[time.Time]types.Bucket[B, A], error) {
+func (r *Buckets[B, A]) GetBuckets(ctx context.Context, userId string, startTime, endTime time.Time) (types.BucketsByTime[B, A], error) {
 	if ctx == nil {
 		return nil, errors.New("context is missing")
 	}
@@ -33,7 +33,7 @@ func (r *Buckets[B, A]) GetBuckets(ctx context.Context, userId string, startTime
 	}
 
 	buckets := make([]types.Bucket[B, A], 1)
-	transformed := make(map[time.Time]types.Bucket[B, A], 1)
+	transformed := make(types.BucketsByTime[B, A], 1)
 
 	selector := bson.M{
 		"userId": userId,
@@ -55,7 +55,7 @@ func (r *Buckets[B, A]) GetBuckets(ctx context.Context, userId string, startTime
 	}
 
 	for _, bucket := range buckets {
-		transformed[bucket.Time] = bucket
+		transformed[bucket.Time] = &bucket
 	}
 
 	return transformed, nil
@@ -80,31 +80,6 @@ func (r *Buckets[B, A]) TrimExcessBuckets(ctx context.Context, userId string) er
 	}
 
 	_, err = r.DeleteMany(ctx, selector)
-	return err
-}
-
-func (r *Buckets[B, A]) AddBucket(ctx context.Context, bucket types.Bucket[B, A]) error {
-	if ctx == nil {
-		return errors.New("context is missing")
-	}
-	if bucket.UserId == "" {
-		return errors.New("userId is missing")
-	}
-	if bucket.Type == "" {
-		return errors.New("type is missing")
-	}
-
-	selector := bson.M{
-		"userId": bucket.UserId,
-		"type":   r.Type,
-		"time":   bucket.Time,
-	}
-	opts := options.Replace()
-	opts.SetUpsert(true)
-
-	// TODO Bulk insert
-
-	_, err := r.ReplaceOne(ctx, selector, bucket, opts)
 	return err
 }
 
@@ -205,4 +180,39 @@ func (r *Buckets[B, A]) GetTotalHours(ctx context.Context, userId string) (int, 
 	}
 
 	return int(lastBucket.LastData.Sub(firstBucket.FirstData).Hours()), nil
+}
+
+func (r *Buckets[B, A]) writeBuckets(ctx context.Context, buckets []interface{}) error {
+	opts := options.InsertMany()
+	opts.SetOrdered(false)
+	_, err := r.InsertMany(ctx, buckets, opts)
+	return err
+}
+
+func (r *Buckets[B, A]) WriteModifiedBuckets(ctx context.Context, startTime time.Time, buckets types.BucketsByTime[B, A]) error {
+	if ctx == nil {
+		return errors.New("context is missing")
+	}
+	if startTime.IsZero() {
+		return errors.New("startTime is missing")
+	}
+	if len(buckets) == 0 {
+		return nil
+	}
+
+	bucketsInt := make([]interface{}, 0, len(buckets))
+	for _, v := range buckets {
+		if !v.IsModified() {
+			continue
+		}
+		if v.UserId == "" {
+			return errors.New("userId is missing")
+		}
+		if v.Type == "" {
+			return errors.New("type is missing")
+		}
+		bucketsInt = append(bucketsInt, v)
+	}
+
+	return r.writeBuckets(ctx, bucketsInt)
 }

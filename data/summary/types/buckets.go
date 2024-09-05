@@ -211,6 +211,7 @@ type BucketShared struct {
 	Time      time.Time          `json:"time" bson:"time"`
 	FirstData time.Time          `json:"firstTime" bson:"firstTime"`
 	LastData  time.Time          `json:"lastTime" bson:"lastTime"`
+	modified  bool
 }
 
 func (BS *BucketShared) Add(shared *BucketShared) {
@@ -221,6 +222,14 @@ func (BS *BucketShared) Add(shared *BucketShared) {
 	if shared.LastData.After(BS.LastData) {
 		BS.LastData = shared.LastData
 	}
+}
+
+func (BS *BucketShared) SetModified() {
+	BS.modified = true
+}
+
+func (BS *BucketShared) IsModified() bool {
+	return BS.modified
 }
 
 type BucketData interface {
@@ -262,17 +271,19 @@ func NewBucket[B BucketDataPt[A], A BucketData](userId string, date time.Time, t
 //}
 
 func (B *Bucket[B, A]) Add(bucket *Bucket[B, A]) {
+	B.SetModified()
 	B.Data.Add(bucket.Data)
 	B.BucketShared.Add(&bucket.BucketShared)
 }
 
 func (B *Bucket[B, A]) Update(record data.Datum) error {
+	B.SetModified()
 	return B.Data.Update(record, &B.BucketShared)
 }
 
 type BucketsByTime[B BucketDataPt[A], A BucketData] map[time.Time]*Bucket[B, A]
 
-func (BT BucketsByTime[B, A]) AddData(userId string, typ string, userData []data.Datum) error {
+func (BT BucketsByTime[B, A]) Update(userId string, typ string, userData []data.Datum) error {
 	for _, r := range userData {
 		// truncate time is not timezone/DST safe here, even if we do expect UTC, never truncate non-utc
 		recordHour := r.GetTime().UTC().Truncate(time.Hour)
