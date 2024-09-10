@@ -131,10 +131,10 @@ func (R *GlucoseRanges) finalizeRecords() {
 	R.AnyHigh.Percent = float64(R.VeryHigh.Minutes+R.High.Minutes) / float64(R.Total.Records)
 }
 
-func (R *GlucoseRanges) Finalize(shared *BucketShared) {
+func (R *GlucoseRanges) Finalize(firstData, lastData time.Time) {
 	if R.Total.Minutes != 0 {
 		// if our bucket (period, at this point) has minutes
-		wallMinutes := shared.LastData.Sub(shared.FirstData).Minutes()
+		wallMinutes := lastData.Sub(firstData).Minutes()
 		R.finalizeMinutes(wallMinutes)
 	} else {
 		// otherwise, we only have record counts
@@ -211,17 +211,8 @@ type BucketShared struct {
 	Time      time.Time          `json:"time" bson:"time"`
 	FirstData time.Time          `json:"firstTime" bson:"firstTime"`
 	LastData  time.Time          `json:"lastTime" bson:"lastTime"`
-	modified  bool
-}
 
-func (BS *BucketShared) Add(shared *BucketShared) {
-	if shared.FirstData.Before(BS.FirstData) {
-		BS.FirstData = shared.FirstData
-	}
-
-	if shared.LastData.After(BS.LastData) {
-		BS.LastData = shared.LastData
-	}
+	modified bool
 }
 
 func (BS *BucketShared) SetModified() {
@@ -256,24 +247,6 @@ func NewBucket[B BucketDataPt[A], A BucketData](userId string, date time.Time, t
 		},
 		Data: new(A),
 	}
-}
-
-//func NewCGMBucket[B BucketDataPt[A], A BucketData](userId string, date time.Time) *Bucket[B, A] {
-//	return NewBucket[B, A](userId, date, SummaryTypeCGM)
-//}
-//
-//func NewBGMBucket[B BucketDataPt[A], A BucketData](userId string, date time.Time) *Bucket[B, A] {
-//	return NewBucket[B, A](userId, date, SummaryTypeBGM)
-//}
-//
-//func NewContinuousBucket[B BucketDataPt[A], A BucketData](userId string, date time.Time) *Bucket[B, A] {
-//	return NewBucket[B, A](userId, date, SummaryTypeContinuous)
-//}
-
-func (B *Bucket[B, A]) Add(bucket *Bucket[B, A]) {
-	B.SetModified()
-	B.Data.Add(bucket.Data)
-	B.BucketShared.Add(&bucket.BucketShared)
 }
 
 func (B *Bucket[B, A]) Update(record data.Datum) error {
@@ -311,10 +284,12 @@ func (BT BucketsByTime[B, A]) Update(userId string, typ string, userData []data.
 
 type GlucosePeriod struct {
 	GlucoseRanges
-	state BucketShared
-
 	HoursWithData int `json:"hoursWithData,omitempty" bson:"hoursWithData,omitempty"`
 	DaysWithData  int `json:"daysWithData,omitempty" bson:"daysWithData,omitempty"`
+
+	lastCountedDay time.Time
+	lastData       time.Time
+	firstData      time.Time
 
 	AverageGlucose             float64 `json:"averageGlucoseMmol,omitempty" bson:"avgGlucose,omitempty"`
 	GlucoseManagementIndicator float64 `json:"glucoseManagementIndicator,omitempty" bson:"GMI,omitempty"`
@@ -327,8 +302,38 @@ type GlucosePeriod struct {
 	Delta *GlucosePeriod `json:"delta,omitempty" bson:"delta,omitempty"`
 }
 
+func (P GlucosePeriod) Update(bucket *Bucket[*GlucoseBucket, GlucoseBucket]) {
+	if bucket.Data.Total.Records == 0 {
+		return
+	}
+
+	// TODO this could use some math with firstData/lastData to work with non-hourly buckets, but today they're hourly.
+	P.HoursWithData++
+
+	if bucket.Time.Before(P.firstData) {
+		P.firstData = bucket.Time
+	}
+
+	if P.lastCountedDay.IsZero() {
+		P.lastCountedDay = bucket.Time
+		P.lastData = bucket.Time
+
+		P.DaysWithData++
+	} else if P.lastCountedDay.Sub(bucket.Time).Hours() >= 24 {
+		// if we are >= 24h from the last counted day, advance lastCountedDay to day of bucket, but hhmmss of lastData
+		// to maintain day alignment
+		P.lastCountedDay = time.Date(bucket.Time.Year(), bucket.Time.Month(), bucket.Time.Day(),
+			P.lastData.Hour(), P.lastData.Minute(), P.lastData.Second(), P.lastData.Nanosecond(), P.lastData.Location())
+
+		P.DaysWithData++
+	}
+
+	P.Add(&bucket.Data.GlucoseRanges)
+
+}
+
 func (P GlucosePeriod) Finalize(days int) {
-	P.GlucoseRanges.Finalize(&P.state)
+	P.GlucoseRanges.Finalize(P.firstData, P.lastData)
 	P.AverageGlucose = P.Total.Glucose / float64(P.Total.Minutes)
 
 	// we only add GMI if cgm use >70%, otherwise clear it
@@ -340,12 +345,4 @@ func (P GlucosePeriod) Finalize(days int) {
 	P.CoefficientOfVariation = P.StandardDeviation / P.AverageGlucose
 
 	P.AverageDailyRecords = float64(P.Total.Records) / float64(days)
-
-	// TODO HoursWithData
-	// TODO DaysWithData
-	// can it be centralized here? does it have to be in the iteration?
 }
-
-// TODO use Add for adding like-type objects
-// TODO use Update to add metrics to existing object
-// TODO use Finalize to calculate final metrics after add/update

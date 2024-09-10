@@ -46,6 +46,7 @@ func (s *CGMStats) Update(ctx context.Context, shared SummaryShared, bucketsFetc
 		userData, err = cursor.GetNextBatch(ctx)
 		if errors.Is(err, fetcher.ErrCursorExhausted) {
 			hasMoreData = false
+			cursor.Close(ctx)
 		} else if err != nil {
 			return err
 		}
@@ -71,45 +72,56 @@ func (s *CGMStats) Update(ctx context.Context, shared SummaryShared, bucketsFetc
 		}
 	}
 
-	s.CalculateSummary()
+	allBuckets, err := bucketsFetcher.GetAllBuckets(ctx, shared.UserID)
+	if err != nil {
+		return err
+	}
+
+	err = s.CalculateSummary(ctx, allBuckets)
+	if err != nil {
+		return err
+	}
+	allBuckets.Close(ctx)
+
 	s.CalculateDelta()
 
 	return nil
 }
 
-func (s *CGMStats) CalculateSummary() {
-	// count backwards (newest first) through hourly stats, stopping at 24, 24*7, 24*14, 24*30
+func (s *CGMStats) CalculateSummary(ctx context.Context, buckets fetcher.AnyCursor) error {
+	// count backwards (newest first) through hourly stats, stopping at 1d, 7d, 14d, 30d,
 	// currently only supports day precision
 	nextStopPoint := 0
 	nextOffsetStopPoint := 0
-	totalStats := 0
+	totalStats := GlucosePeriod{}
 	totalOffsetStats := GlucosePeriod{}
-	dayCounted := false
-	offsetDayCounted := false
+	var err error
+	var stopPoints []time.Time
 
-	for i := 1; i <= len(s.Buckets); i++ {
-		currentIndex := len(s.Buckets) - i
+	bucket := &Bucket[*GlucoseBucket, GlucoseBucket]{}
+
+	for buckets.Next(ctx) {
+		if err = buckets.Decode(bucket); err != nil {
+			return err
+		}
+
+		// We should have the newest (last) bucket here, use its date for breakpoints
+		if stopPoints == nil {
+			stopPoints = calculateStopPoints(bucket.Time)
+		}
+
+		if bucket.Data.Total.Records == 0 {
+			panic("bucket exists with 0 records")
+		}
+
+		s.TotalHours++
 
 		// only add to offset stats when primary stop point is ahead of offset
 		if nextStopPoint > nextOffsetStopPoint && len(stopPoints) > nextOffsetStopPoint {
-			totalOffsetStats.Add(s.Buckets[currentIndex].Data)
+			totalOffsetStats.Update(bucket)
 
-			if s.Buckets[currentIndex].Data.Total.Records > 0 {
-				totalOffsetStats.HoursWithData++
-
-				if !offsetDayCounted {
-					totalOffsetStats.DaysWithData++
-					offsetDayCounted = true
-				}
-			}
-
-			// new day, reset day counting flag
-			if i%24 == 0 {
-				offsetDayCounted = false
-			}
-
-			if i == stopPoints[nextOffsetStopPoint]*24*2 {
-				s.CalculatePeriod(stopPoints[nextOffsetStopPoint], true, totalOffsetStats)
+			if bucket.Time.Before(stopPoints[nextOffsetStopPoint]) {
+				s.CalculatePeriod(periodLengths[nextOffsetStopPoint], true, totalOffsetStats)
 				nextOffsetStopPoint++
 				totalOffsetStats = GlucosePeriod{}
 			}
@@ -117,24 +129,10 @@ func (s *CGMStats) CalculateSummary() {
 
 		// only count primary stats when the next stop point is a real period
 		if len(stopPoints) > nextStopPoint {
-			totalStats.Add(s.Buckets[currentIndex].Data)
+			totalStats.Update(bucket)
 
-			if s.Buckets[currentIndex].Data.Total.Records > 0 {
-				totalStats.HoursWithData++
-
-				if !dayCounted {
-					totalStats.DaysWithData++
-					dayCounted = true
-				}
-			}
-
-			// end of day, reset day counting flag
-			if i > 0 && i%24 == 0 {
-				dayCounted = false
-			}
-
-			if i == stopPoints[nextStopPoint]*24 {
-				s.CalculatePeriod(stopPoints[nextStopPoint], false, totalStats)
+			if bucket.Time.Before(stopPoints[nextStopPoint]) {
+				s.CalculatePeriod(periodLengths[nextStopPoint], false, totalStats)
 				nextStopPoint++
 			}
 		}
@@ -142,14 +140,14 @@ func (s *CGMStats) CalculateSummary() {
 
 	// fill in periods we never reached
 	for i := nextStopPoint; i < len(stopPoints); i++ {
-		s.CalculatePeriod(stopPoints[i], false, totalStats)
+		s.CalculatePeriod(periodLengths[i], false, totalStats)
 	}
 	for i := nextOffsetStopPoint; i < len(stopPoints); i++ {
-		s.CalculatePeriod(stopPoints[i], true, totalOffsetStats)
+		s.CalculatePeriod(periodLengths[i], true, totalOffsetStats)
 		totalOffsetStats = GlucosePeriod{}
 	}
 
-	s.TotalHours = len(s.Buckets)
+	return nil
 }
 
 func (s *CGMStats) CalculateDelta() {

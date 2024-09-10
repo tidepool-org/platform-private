@@ -33,8 +33,6 @@ const (
 	OutdatedReasonBackfill        = "BACKFILL"
 )
 
-var stopPoints = [...]int{1, 7, 14, 30}
-
 var DeviceDataTypes = []string{continuous.Type, selfmonitored.Type}
 var DeviceDataTypesSet = mapset.NewSet[string](DeviceDataTypes...)
 
@@ -161,7 +159,7 @@ func Create[A StatsPt[T, P, B], P BucketDataPt[B], T Stats, B BucketData](userId
 	return s
 }
 
-func GetTypeString[A StatsPt[T, P, B], T Stats, P BucketDataPt[B], B BucketData]() string {
+func GetTypeString[A StatsPt[T, P, B], P BucketDataPt[B], T Stats, B BucketData]() string {
 	s := new(Summary[A, P, T, B])
 	return s.Stats.GetType()
 }

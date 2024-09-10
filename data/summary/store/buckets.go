@@ -61,6 +61,30 @@ func (r *Buckets[B, A]) GetBuckets(ctx context.Context, userId string, startTime
 	return transformed, nil
 }
 
+func (r *Buckets[B, A]) GetAllBuckets(ctx context.Context, userId string) (*mongo.Cursor, error) {
+	if ctx == nil {
+		return nil, errors.New("context is missing")
+	}
+	if userId == "" {
+		return nil, errors.New("userId is missing")
+	}
+
+	selector := bson.M{
+		"userId": userId,
+		"type":   r.Type,
+	}
+	opts := options.Find()
+	opts.SetSort(bson.D{{Key: "time", Value: -1}})
+	opts.SetBatchSize(200)
+
+	cur, err := r.Find(ctx, selector, opts)
+	if err == nil || errors.Is(err, mongo.ErrNoDocuments) {
+		return cur, nil
+	}
+
+	return nil, fmt.Errorf("unable to get buckets: %w", err)
+}
+
 func (r *Buckets[B, A]) TrimExcessBuckets(ctx context.Context, userId string) error {
 	if ctx == nil {
 		return errors.New("context is missing")

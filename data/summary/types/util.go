@@ -74,3 +74,14 @@ func Delta[T Number](a, b, c, d *T) {
 	*c = *a - *b
 	*d = -*c
 }
+
+var periodLengths = [...]int{1, 7, 14, 30}
+
+func calculateStopPoints(endTime time.Time) []time.Time {
+	stopPoints := make([]time.Time, len(periodLengths))
+	for i := range periodLengths {
+		stopPoints[i] = endTime.AddDate(0, 0, -periodLengths[i])
+	}
+
+	return stopPoints
+}
