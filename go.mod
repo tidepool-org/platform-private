@@ -18,7 +18,7 @@ require (
 	github.com/mjibson/esc v0.2.0
 	github.com/onsi/ginkgo/v2 v2.20.2
 	github.com/onsi/gomega v1.34.2
-	github.com/prometheus/client_golang v1.20.2
+	github.com/prometheus/client_golang v1.20.3
 	github.com/rinchsan/device-check-go v1.3.0
 	github.com/tidepool-org/clinic/client v0.0.0-20240802193352-3f912afe2109
 	github.com/tidepool-org/devices/api v0.0.0-20240412011010-75b16d8daec0
@@ -27,14 +27,14 @@ require (
 	github.com/urfave/cli v1.22.15
 	go.mongodb.org/mongo-driver v1.16.1
 	go.uber.org/fx v1.22.2
-	golang.org/x/crypto v0.26.0
-	golang.org/x/exp v0.0.0-20240904232852-e7e105dedf7e
+	golang.org/x/crypto v0.27.0
+	golang.org/x/exp v0.0.0-20240909161429-701f63a606c0
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616
 	golang.org/x/oauth2 v0.23.0
 	golang.org/x/sync v0.8.0
-	golang.org/x/tools v0.24.0
+	golang.org/x/tools v0.25.0
 	gonum.org/v1/gonum v0.15.1
-	google.golang.org/grpc v1.66.0
+	google.golang.org/grpc v1.66.1
 	gopkg.in/yaml.v2 v2.4.0
 	syreclabs.com/go/faker v1.2.3
 )
@@ -82,7 +82,7 @@ require (
 	github.com/pierrec/lz4/v4 v4.1.21 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_model v0.6.1 // indirect
-	github.com/prometheus/common v0.58.0 // indirect
+	github.com/prometheus/common v0.59.1 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/radovskyb/watcher v1.0.7 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
@@ -97,7 +97,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/mod v0.21.0 // indirect
-	golang.org/x/net v0.28.0 // indirect
+	golang.org/x/net v0.29.0 // indirect
 	golang.org/x/sys v0.25.0 // indirect
 	golang.org/x/term v0.24.0 // indirect
 	golang.org/x/text v0.18.0 // indirect

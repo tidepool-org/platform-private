@@ -13,6 +13,14 @@ import (
 	"time"
 )
 
+type GlucosePeriods map[string]*GlucosePeriod
+
+type GlucoseStats struct {
+	Periods       GlucosePeriods `json:"periods,omitempty" bson:"periods,omitempty"`
+	OffsetPeriods GlucosePeriods `json:"offsetPeriods,omitempty" bson:"offsetPeriods,omitempty"`
+	TotalHours    int            `json:"totalHours,omitempty" bson:"totalHours,omitempty"`
+}
+
 type GlucoseRange struct {
 	Glucose  float64 `json:"glucose,omitempty" bson:"glucose,omitempty"`
 	Percent  float64 `json:"percent,omitempty" bson:"percent,omitempty"`
