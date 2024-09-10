@@ -12,10 +12,14 @@ import (
 
 type GlucosePeriods map[string]*GlucosePeriod
 
-type CGMStats struct {
+type GlucoseStats struct {
 	Periods       GlucosePeriods `json:"periods,omitempty" bson:"periods,omitempty"`
 	OffsetPeriods GlucosePeriods `json:"offsetPeriods,omitempty" bson:"offsetPeriods,omitempty"`
 	TotalHours    int            `json:"totalHours,omitempty" bson:"totalHours,omitempty"`
+}
+
+type CGMStats struct {
+	GlucoseStats
 }
 
 func (*CGMStats) GetType() string {
@@ -26,13 +30,13 @@ func (*CGMStats) GetDeviceDataTypes() []string {
 	return []string{continuous.Type}
 }
 
-func (s *CGMStats) Init() {
+func (s *GlucoseStats) Init() {
 	s.Periods = make(map[string]*GlucosePeriod)
 	s.OffsetPeriods = make(map[string]*GlucosePeriod)
 	s.TotalHours = 0
 }
 
-func (s *CGMStats) Update(ctx context.Context, shared SummaryShared, bucketsFetcher fetcher.BucketFetcher[*GlucoseBucket, GlucoseBucket], cursor fetcher.DeviceDataCursor) error {
+func (s *GlucoseStats) Update(ctx context.Context, shared SummaryShared, bucketsFetcher fetcher.BucketFetcher[*GlucoseBucket, GlucoseBucket], cursor fetcher.DeviceDataCursor) error {
 	// move all of this to a generic method? fetcher interface?
 
 	hasMoreData := true
@@ -88,7 +92,7 @@ func (s *CGMStats) Update(ctx context.Context, shared SummaryShared, bucketsFetc
 	return nil
 }
 
-func (s *CGMStats) CalculateSummary(ctx context.Context, buckets fetcher.AnyCursor) error {
+func (s *GlucoseStats) CalculateSummary(ctx context.Context, buckets fetcher.AnyCursor) error {
 	// count backwards (newest first) through hourly stats, stopping at 1d, 7d, 14d, 30d,
 	// currently only supports day precision
 	nextStopPoint := 0
@@ -150,7 +154,7 @@ func (s *CGMStats) CalculateSummary(ctx context.Context, buckets fetcher.AnyCurs
 	return nil
 }
 
-func (s *CGMStats) CalculateDelta() {
+func (s *GlucoseStats) CalculateDelta() {
 	for k := range s.Periods {
 		BinDelta(&s.Periods[k].Total, &s.OffsetPeriods[k].Total, &s.Periods[k].Delta.Total, &s.OffsetPeriods[k].Delta.Total)
 		BinDelta(&s.Periods[k].VeryLow, &s.OffsetPeriods[k].VeryLow, &s.Periods[k].Delta.VeryLow, &s.OffsetPeriods[k].Delta.VeryLow)
@@ -172,7 +176,7 @@ func (s *CGMStats) CalculateDelta() {
 	}
 }
 
-func (s *CGMStats) CalculatePeriod(i int, offset bool, period GlucosePeriod) {
+func (s *GlucoseStats) CalculatePeriod(i int, offset bool, period GlucosePeriod) {
 	// We don't make a copy of period, as the struct has no pointers... right? you didn't add any pointers right?
 	period.Finalize(i)
 
