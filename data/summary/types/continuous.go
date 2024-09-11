@@ -11,12 +11,7 @@ import (
 	glucoseDatum "github.com/tidepool-org/platform/data/types/blood/glucose"
 )
 
-/* A summary type requires:
-___Stats struct with:
-	stats.GetType()
-	stats.GetDeviceDataTypes()
-
-*/
+// This is a good example of what a summary type requires, as it does not share as many pieces as CGM/BGM
 
 type ContinuousStats struct {
 	Periods    ContinuousPeriods                              `json:"periods" bson:"periods"`
@@ -124,7 +119,6 @@ func (s *ContinuousStats) Update(ctx context.Context, shared SummaryShared, buck
 		userData, err = cursor.GetNextBatch(ctx)
 		if errors.Is(err, fetcher.ErrCursorExhausted) {
 			hasMoreData = false
-			cursor.Close(ctx)
 		} else if err != nil {
 			return err
 		}
@@ -154,12 +148,12 @@ func (s *ContinuousStats) Update(ctx context.Context, shared SummaryShared, buck
 	if err != nil {
 		return err
 	}
+	defer allBuckets.Close(ctx)
 
 	err = s.CalculateSummary(ctx, allBuckets)
 	if err != nil {
 		return err
 	}
-	allBuckets.Close(ctx)
 
 	return nil
 }

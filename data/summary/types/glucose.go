@@ -294,7 +294,6 @@ func (s *GlucoseStats) Update(ctx context.Context, shared SummaryShared, buckets
 		userData, err = cursor.GetNextBatch(ctx)
 		if errors.Is(err, fetcher.ErrCursorExhausted) {
 			hasMoreData = false
-			cursor.Close(ctx)
 		} else if err != nil {
 			return err
 		}
@@ -324,12 +323,12 @@ func (s *GlucoseStats) Update(ctx context.Context, shared SummaryShared, buckets
 	if err != nil {
 		return err
 	}
+	defer allBuckets.Close(ctx)
 
 	err = s.CalculateSummary(ctx, allBuckets)
 	if err != nil {
 		return err
 	}
-	allBuckets.Close(ctx)
 
 	s.CalculateDelta()
 
