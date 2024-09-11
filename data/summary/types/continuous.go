@@ -3,10 +3,10 @@ package types
 import (
 	"context"
 	"errors"
-	"github.com/tidepool-org/platform/data"
 	"strconv"
 	"time"
 
+	"github.com/tidepool-org/platform/data"
 	"github.com/tidepool-org/platform/data/summary/fetcher"
 	glucoseDatum "github.com/tidepool-org/platform/data/types/blood/glucose"
 )

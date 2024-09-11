@@ -2,8 +2,9 @@ package fetcher
 
 import (
 	"context"
-	"github.com/tidepool-org/platform/data/summary/types"
 	"time"
+
+	"github.com/tidepool-org/platform/data/summary/types"
 
 	"go.mongodb.org/mongo-driver/mongo"
 

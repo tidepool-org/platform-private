@@ -1,7 +1,6 @@
 package types
 
 import (
-	"github.com/tidepool-org/platform/data/types/blood/glucose/continuous"
 	"math"
 	"strings"
 	"time"
@@ -9,6 +8,7 @@ import (
 	"golang.org/x/exp/constraints"
 
 	glucoseDatum "github.com/tidepool-org/platform/data/types/blood/glucose"
+	"github.com/tidepool-org/platform/data/types/blood/glucose/continuous"
 )
 
 // GetDuration assumes all except freestyle is 5 minutes

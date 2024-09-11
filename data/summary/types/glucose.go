@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
+	"strconv"
+	"time"
+
 	"github.com/tidepool-org/platform/data"
 	"github.com/tidepool-org/platform/data/blood/glucose"
 	"github.com/tidepool-org/platform/data/summary/fetcher"
 	glucoseDatum "github.com/tidepool-org/platform/data/types/blood/glucose"
-	"math"
-	"strconv"
-	"time"
 )
 
 type GlucosePeriods map[string]*GlucosePeriod

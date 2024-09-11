@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/tidepool-org/platform/data/summary/types"
-	storeStructuredMongo "github.com/tidepool-org/platform/store/structured/mongo"
+	"time"
+
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"time"
+
+	"github.com/tidepool-org/platform/data/summary/types"
+	storeStructuredMongo "github.com/tidepool-org/platform/store/structured/mongo"
 )
 
 type Buckets[B types.BucketDataPt[A], A types.BucketData] struct {
