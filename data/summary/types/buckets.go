@@ -8,9 +8,6 @@ import (
 
 const minutesPerDay = 60 * 24
 
-// ContinuousBucket TODO placeholder for generics testing
-type ContinuousBucket GlucoseBucket
-
 type BucketShared struct {
 	ID        primitive.ObjectID `json:"-" bson:"_id,omitempty"`
 	UserId    string             `json:"userId" bson:"userId"`
@@ -31,7 +28,7 @@ func (BS *BucketShared) IsModified() bool {
 }
 
 type BucketData interface {
-	GlucoseBucket | ContinuousBucketData
+	GlucoseBucket | ContinuousBucket
 }
 
 type BucketDataPt[A BucketData] interface {

@@ -59,7 +59,7 @@ func Abs[T Number](x T) T {
 	return x
 }
 
-func BinDelta(bin, offsetBin, deltaBin, offsetDeltaBin *GlucoseRange) {
+func BinDelta(bin, offsetBin, deltaBin, offsetDeltaBin *Range) {
 	deltaBin.Percent = bin.Percent - offsetBin.Percent
 	offsetDeltaBin.Percent = -deltaBin.Percent
 

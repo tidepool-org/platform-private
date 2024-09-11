@@ -21,7 +21,7 @@ type GlucoseStats struct {
 	TotalHours    int            `json:"totalHours,omitempty" bson:"totalHours,omitempty"`
 }
 
-type GlucoseRange struct {
+type Range struct {
 	Glucose  float64 `json:"glucose,omitempty" bson:"glucose,omitempty"`
 	Percent  float64 `json:"percent,omitempty" bson:"percent,omitempty"`
 	Variance float64 `json:"variance,omitempty" bson:"variance,omitempty"`
@@ -30,7 +30,7 @@ type GlucoseRange struct {
 	Records int `json:"records,omitempty" bson:"records,omitempty"`
 }
 
-func (R *GlucoseRange) Add(new *GlucoseRange) {
+func (R *Range) Add(new *Range) {
 	R.Variance = R.CombineVariance(new)
 	R.Glucose += new.Glucose
 	R.Minutes += new.Minutes
@@ -38,7 +38,7 @@ func (R *GlucoseRange) Add(new *GlucoseRange) {
 	// We skip percent here as it has to be calculated relative to other ranges
 }
 
-func (R *GlucoseRange) Update(value float64, duration int) {
+func (R *Range) Update(value float64, duration int) {
 	// this must occur before the counters below as the pre-increment counters are used during calc
 	R.Variance = R.CalculateVariance(value, float64(duration))
 
@@ -48,7 +48,7 @@ func (R *GlucoseRange) Update(value float64, duration int) {
 }
 
 // CombineVariance Implemented using https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm
-func (R *GlucoseRange) CombineVariance(new *GlucoseRange) float64 {
+func (R *Range) CombineVariance(new *Range) float64 {
 	// Exit early for No-Op case
 	if R.Variance == 0 && new.Variance == 0 {
 		return 0
@@ -72,7 +72,7 @@ func (R *GlucoseRange) CombineVariance(new *GlucoseRange) float64 {
 }
 
 // CalculateVariance Implemented using https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Weighted_incremental_algorithm
-func (R *GlucoseRange) CalculateVariance(value float64, duration float64) float64 {
+func (R *Range) CalculateVariance(value float64, duration float64) float64 {
 	var mean float64 = 0
 	if R.Minutes > 0 {
 		mean = R.Glucose / float64(R.Minutes)
@@ -84,15 +84,15 @@ func (R *GlucoseRange) CalculateVariance(value float64, duration float64) float6
 }
 
 type GlucoseRanges struct {
-	Total       GlucoseRange `json:"cgmUse,omitempty" bson:"cgmUse,omitempty"`
-	VeryLow     GlucoseRange `json:"inVeryLow,omitempty" bson:"inVeryLow,omitempty"`
-	Low         GlucoseRange `json:"inLow,omitempty" bson:"inLow,omitempty"`
-	Target      GlucoseRange `json:"inTarget,omitempty" bson:"inTarget,omitempty"`
-	High        GlucoseRange `json:"inHigh,omitempty" bson:"inHigh,omitempty"`
-	VeryHigh    GlucoseRange `json:"inVeryHigh,omitempty" bson:"inVeryHigh,omitempty"`
-	ExtremeHigh GlucoseRange `json:"inExtremeHigh,omitempty" bson:"inExtremeHigh,omitempty"`
-	AnyLow      GlucoseRange `json:"inAnyLow,omitempty" bson:"inAnyLow,omitempty"`
-	AnyHigh     GlucoseRange `json:"inAnyHigh,omitempty" bson:"inAnyHigh,omitempty"`
+	Total       Range `json:"cgmUse,omitempty" bson:"cgmUse,omitempty"`
+	VeryLow     Range `json:"inVeryLow,omitempty" bson:"inVeryLow,omitempty"`
+	Low         Range `json:"inLow,omitempty" bson:"inLow,omitempty"`
+	Target      Range `json:"inTarget,omitempty" bson:"inTarget,omitempty"`
+	High        Range `json:"inHigh,omitempty" bson:"inHigh,omitempty"`
+	VeryHigh    Range `json:"inVeryHigh,omitempty" bson:"inVeryHigh,omitempty"`
+	ExtremeHigh Range `json:"inExtremeHigh,omitempty" bson:"inExtremeHigh,omitempty"`
+	AnyLow      Range `json:"inAnyLow,omitempty" bson:"inAnyLow,omitempty"`
+	AnyHigh     Range `json:"inAnyHigh,omitempty" bson:"inAnyHigh,omitempty"`
 }
 
 func (R *GlucoseRanges) Add(new *GlucoseRanges) {
