@@ -44,6 +44,17 @@ type ContinuousRanges struct {
 	Total Range `json:"total" bson:"total"`
 }
 
+func (CR *ContinuousRanges) Add(new *ContinuousRanges) {
+	CR.Realtime.Add(&new.Realtime)
+	CR.Total.Add(&new.Total)
+	CR.Deferred.Add(&new.Deferred)
+}
+
+func (CR *ContinuousRanges) Finalize() {
+	CR.Realtime.Percent = float64(CR.Realtime.Records) / float64(CR.Total.Records)
+	CR.Deferred.Percent = float64(CR.Deferred.Records) / float64(CR.Total.Records)
+}
+
 type ContinuousBucket struct {
 	BucketShared
 	ContinuousRanges
@@ -75,7 +86,20 @@ func (B *ContinuousBucket) Update(r data.Datum, shared *BucketShared) error {
 type ContinuousPeriod struct {
 	ContinuousRanges
 
-	AverageDailyRecords *float64 `json:"averageDailyRecords" bson:"averageDailyRecords"`
+	AverageDailyRecords float64 `json:"averageDailyRecords" bson:"averageDailyRecords"`
+}
+
+func (P ContinuousPeriod) Update(bucket *Bucket[*ContinuousBucket, ContinuousBucket]) {
+	if bucket.Data.Total.Records == 0 {
+		return
+	}
+
+	P.Add(&bucket.Data.ContinuousRanges)
+}
+
+func (P ContinuousPeriod) Finalize(days int) {
+	P.ContinuousRanges.Finalize()
+	P.AverageDailyRecords = float64(P.Total.Records) / float64(days)
 }
 
 type ContinuousPeriods map[string]*ContinuousPeriod
@@ -148,7 +172,7 @@ func (s *ContinuousStats) CalculateSummary(ctx context.Context, buckets fetcher.
 	var err error
 	var stopPoints []time.Time
 
-	bucket := &Bucket[*GlucoseBucket, GlucoseBucket]{}
+	bucket := &Bucket[*ContinuousBucket, ContinuousBucket]{}
 
 	for buckets.Next(ctx) {
 		if err = buckets.Decode(bucket); err != nil {

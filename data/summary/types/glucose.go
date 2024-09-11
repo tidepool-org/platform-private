@@ -128,15 +128,15 @@ func (R *GlucoseRanges) finalizeMinutes(wallMinutes float64) {
 }
 
 func (R *GlucoseRanges) finalizeRecords() {
-	R.Total.Percent = float64(R.Total.Minutes) / float64(R.Total.Records)
-	R.VeryLow.Percent = float64(R.VeryLow.Minutes) / float64(R.Total.Records)
-	R.Low.Percent = float64(R.Low.Minutes) / float64(R.Total.Records)
-	R.Target.Percent = float64(R.Target.Minutes) / float64(R.Total.Records)
-	R.High.Percent = float64(R.High.Minutes) / float64(R.Total.Records)
-	R.VeryHigh.Percent = float64(R.VeryHigh.Minutes) / float64(R.Total.Records)
-	R.ExtremeHigh.Percent = float64(R.ExtremeHigh.Minutes) / float64(R.Total.Records)
-	R.AnyLow.Percent = float64(R.VeryLow.Minutes+R.Low.Minutes) / float64(R.Total.Records)
-	R.AnyHigh.Percent = float64(R.VeryHigh.Minutes+R.High.Minutes) / float64(R.Total.Records)
+	R.Total.Percent = float64(R.Total.Records) / float64(R.Total.Records)
+	R.VeryLow.Percent = float64(R.VeryLow.Records) / float64(R.Total.Records)
+	R.Low.Percent = float64(R.Low.Records) / float64(R.Total.Records)
+	R.Target.Percent = float64(R.Target.Records) / float64(R.Total.Records)
+	R.High.Percent = float64(R.High.Records) / float64(R.Total.Records)
+	R.VeryHigh.Percent = float64(R.VeryHigh.Records) / float64(R.Total.Records)
+	R.ExtremeHigh.Percent = float64(R.ExtremeHigh.Records) / float64(R.Total.Records)
+	R.AnyLow.Percent = float64(R.VeryLow.Records+R.Low.Records) / float64(R.Total.Records)
+	R.AnyHigh.Percent = float64(R.VeryHigh.Records+R.High.Records) / float64(R.Total.Records)
 }
 
 func (R *GlucoseRanges) Finalize(firstData, lastData time.Time) {
