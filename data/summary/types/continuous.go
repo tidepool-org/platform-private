@@ -14,9 +14,8 @@ import (
 // This is a good example of what a summary type requires, as it does not share as many pieces as CGM/BGM
 
 type ContinuousStats struct {
-	Periods    ContinuousPeriods                              `json:"periods" bson:"periods"`
-	Buckets    []*Bucket[*ContinuousBucket, ContinuousBucket] `json:"buckets" bson:"buckets"`
-	TotalHours int                                            `json:"totalHours" bson:"totalHours"`
+	Periods    ContinuousPeriods `json:"periods" bson:"periods"`
+	TotalHours int               `json:"totalHours" bson:"totalHours"`
 }
 
 func (*ContinuousStats) GetType() string {
@@ -100,7 +99,6 @@ func (P ContinuousPeriod) Finalize(days int) {
 type ContinuousPeriods map[string]*ContinuousPeriod
 
 func (s *ContinuousStats) Init() {
-	s.Buckets = make([]*Bucket[*ContinuousBucket, ContinuousBucket], 0)
 	s.Periods = make(map[string]*ContinuousPeriod)
 	s.TotalHours = 0
 }
@@ -203,35 +201,8 @@ func (s *ContinuousStats) CalculateSummary(ctx context.Context, buckets fetcher.
 	return nil
 }
 
-func (s *ContinuousStats) CalculatePeriod(i int, offset bool, period ContinuousPeriod) {
+func (s *ContinuousStats) CalculatePeriod(i int, _ bool, period ContinuousPeriod) {
 	// We don't make a copy of period, as the struct has no pointers... right? you didn't add any pointers right?
 	period.Finalize(i)
 	s.Periods[strconv.Itoa(i)+"d"] = &period
-}
-
-func (s *ContinuousStats) GetNumberOfDaysWithRealtimeData(startTime time.Time, endTime time.Time) (count int) {
-	loc1 := startTime.Location()
-	loc2 := endTime.Location()
-
-	startOffset := int(startTime.Sub(s.Buckets[0].Time.In(loc1)).Hours())
-	// cap to start of list
-	if startOffset < 0 {
-		startOffset = 0
-	}
-
-	endOffset := int(endTime.Sub(s.Buckets[0].Time.In(loc2)).Hours())
-	// cap to end of list
-	if endOffset > len(s.Buckets) {
-		endOffset = len(s.Buckets)
-	}
-
-	for i := startOffset; i < endOffset; i++ {
-		if s.Buckets[i].Data.Realtime.Records > 0 {
-			count += 1
-			i += 23 - s.Buckets[i].Time.In(loc1).Hour()
-			continue
-		}
-	}
-
-	return count
 }

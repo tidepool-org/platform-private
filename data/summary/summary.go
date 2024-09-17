@@ -46,6 +46,7 @@ func GetSummarizer[A types.StatsPt[T, P, B], P types.BucketDataPt[B], T types.St
 
 type Summarizer[A types.StatsPt[T, P, B], P types.BucketDataPt[B], T types.Stats, B types.BucketData] interface {
 	GetSummary(ctx context.Context, userId string) (*types.Summary[A, P, T, B], error)
+	GetBucketsRange(ctx context.Context, userId string, startTime time.Time, endTime time.Time) (fetcher.AnyCursor, error)
 	SetOutdated(ctx context.Context, userId, reason string) (*time.Time, error)
 	UpdateSummary(ctx context.Context, userId string) (*types.Summary[A, P, T, B], error)
 	GetOutdatedUserIDs(ctx context.Context, pagination *page.Pagination) (*types.OutdatedSummariesResponse, error)
@@ -113,6 +114,10 @@ func (gs *GlucoseSummarizer[A, P, T, B]) GetSummary(ctx context.Context, userId 
 
 func (gs *GlucoseSummarizer[A, P, T, B]) ClearInvalidatedBuckets(ctx context.Context, userId string, earliestModified time.Time) (time.Time, error) {
 	return gs.buckets.ClearInvalidatedBuckets(ctx, userId, earliestModified)
+}
+
+func (gs *GlucoseSummarizer[A, P, T, B]) GetBucketsRange(ctx context.Context, userId string, startTime time.Time, endTime time.Time) (fetcher.AnyCursor, error) {
+	return gs.buckets.GetBucketsRange(ctx, userId, &startTime, &endTime)
 }
 
 func (gs *GlucoseSummarizer[A, P, T, B]) SetOutdated(ctx context.Context, userId, reason string) (*time.Time, error) {

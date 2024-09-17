@@ -71,10 +71,30 @@ func (r *Buckets[B, A]) GetAllBuckets(ctx context.Context, userId string) (*mong
 		return nil, errors.New("userId is missing")
 	}
 
+	return r.GetBucketsRange(ctx, userId, nil, nil)
+}
+
+func (r *Buckets[B, A]) GetBucketsRange(ctx context.Context, userId string, startTime *time.Time, endTime *time.Time) (*mongo.Cursor, error) {
+	if ctx == nil {
+		return nil, errors.New("context is missing")
+	}
+	if userId == "" {
+		return nil, errors.New("userId is missing")
+	}
+
 	selector := bson.M{
 		"userId": userId,
 		"type":   r.Type,
 	}
+
+	if startTime != nil && !startTime.IsZero() {
+		selector["time"].(bson.M)["$gte"] = startTime
+	}
+
+	if endTime != nil && !endTime.IsZero() {
+		selector["time"].(bson.M)["$lte"] = endTime
+	}
+
 	opts := options.Find()
 	opts.SetSort(bson.D{{Key: "time", Value: -1}})
 	opts.SetBatchSize(200)

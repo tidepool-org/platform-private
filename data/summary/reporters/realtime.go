@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/tidepool-org/platform/data/summary/fetcher"
 	"time"
 
 	clinic "github.com/tidepool-org/clinic/client"
@@ -22,11 +23,11 @@ const (
 )
 
 type PatientRealtimeDaysReporter struct {
-	summarizer summary.Summarizer[*types.ContinuousStats, types.ContinuousStats]
+	summarizer summary.Summarizer[*types.ContinuousStats, *types.ContinuousBucket, types.ContinuousStats, types.ContinuousBucket]
 }
 
 func NewReporter(registry *summary.SummarizerRegistry) *PatientRealtimeDaysReporter {
-	summarizer := summary.GetSummarizer[*types.ContinuousStats](registry)
+	summarizer := summary.GetSummarizer[*types.ContinuousStats, *types.ContinuousBucket](registry)
 	return &PatientRealtimeDaysReporter{
 		summarizer: summarizer,
 	}
@@ -94,6 +95,23 @@ func (r *PatientRealtimeDaysReporter) GetRealtimeDaysForPatients(ctx context.Con
 	}, nil
 }
 
+func (r *PatientRealtimeDaysReporter) GetNumberOfDaysWithRealtimeData(ctx context.Context, buckets fetcher.AnyCursor) (count int, err error) {
+	bucket := types.Bucket[*types.ContinuousBucket, types.ContinuousBucket]{}
+
+	for buckets.Next(ctx) {
+		if err = buckets.Decode(bucket); err != nil {
+			return 0, err
+		}
+		if bucket.Data.Realtime.Records > 0 {
+			count += 1
+
+			// TODO skipping to next day
+		}
+	}
+
+	return count, nil
+}
+
 func (r *PatientRealtimeDaysReporter) GetRealtimeDaysForUsers(ctx context.Context, userIds []string, startTime time.Time, endTime time.Time) (map[string]int, error) {
 	if ctx == nil {
 		return nil, errors.New("context is missing")
@@ -123,15 +141,13 @@ func (r *PatientRealtimeDaysReporter) GetRealtimeDaysForUsers(ctx context.Contex
 	realtimeUsers := make(map[string]int)
 
 	for _, userId := range userIds {
-		userSummary, err := r.summarizer.GetSummary(ctx, userId)
+		buckets, err := r.summarizer.GetBucketsRange(ctx, userId, startTime, endTime)
 		if err != nil {
 			return nil, err
 		}
-
-		if userSummary != nil && userSummary.Stats != nil {
-			realtimeUsers[userId] = userSummary.Stats.GetNumberOfDaysWithRealtimeData(startTime, endTime)
-		} else {
-			realtimeUsers[userId] = 0
+		realtimeUsers[userId], err = r.GetNumberOfDaysWithRealtimeData(ctx, buckets)
+		if err != nil {
+			return nil, err
 		}
 	}
 

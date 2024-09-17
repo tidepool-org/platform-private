@@ -51,7 +51,7 @@ var _ = Describe("Summary Stats Mongo", func() {
 			summaryRepository = store.NewSummaryRepository().GetStore()
 			Expect(summaryRepository).ToNot(BeNil())
 
-			cgmStore := dataStoreSummary.New[*types.CGMStats](summaryRepository)
+			cgmStore := dataStoreSummary.NewSummaries[*types.CGMStats, *types.GlucoseBucket](summaryRepository)
 			Expect(cgmStore).ToNot(BeNil())
 		})
 
@@ -63,7 +63,7 @@ var _ = Describe("Summary Stats Mongo", func() {
 			summaryRepository = store.NewSummaryRepository().GetStore()
 			Expect(summaryRepository).ToNot(BeNil())
 
-			bgmStore := dataStoreSummary.New[*types.BGMStats](summaryRepository)
+			bgmStore := dataStoreSummary.NewSummaries[*types.BGMStats, *types.GlucoseBucket](summaryRepository)
 			Expect(bgmStore).ToNot(BeNil())
 		})
 
@@ -75,7 +75,7 @@ var _ = Describe("Summary Stats Mongo", func() {
 			summaryRepository = store.NewSummaryRepository().GetStore()
 			Expect(summaryRepository).ToNot(BeNil())
 
-			continuousStore := dataStoreSummary.New[*types.ContinuousStats](summaryRepository)
+			continuousStore := dataStoreSummary.NewSummaries[*types.ContinuousStats, *types.ContinuousBucket](summaryRepository)
 			Expect(continuousStore).ToNot(BeNil())
 		})
 	})
@@ -101,7 +101,7 @@ var _ = Describe("Summary Stats Mongo", func() {
 		Context("With a repository", func() {
 			var userId string
 			var userIdOther string
-			var typelessStore *dataStoreSummary.TypelessRepo
+			var typelessStore *dataStoreSummary.TypelessSummaries
 
 			BeforeEach(func() {
 				summaryRepository = store.NewSummaryRepository().GetStore()
@@ -118,11 +118,11 @@ var _ = Describe("Summary Stats Mongo", func() {
 			})
 
 			Context("Continuous", func() {
-				var continuousStore *dataStoreSummary.Repo[*types.ContinuousStats, types.ContinuousStats]
-				var userContinuousSummary *types.Summary[*types.ContinuousStats, types.ContinuousStats]
+				var continuousStore *dataStoreSummary.Summaries[*types.ContinuousStats, *types.ContinuousBucket, types.ContinuousStats, types.ContinuousBucket]
+				var userContinuousSummary *types.Summary[*types.ContinuousStats, *types.ContinuousBucket, types.ContinuousStats, types.ContinuousBucket]
 
 				BeforeEach(func() {
-					continuousStore = dataStoreSummary.New[*types.ContinuousStats](summaryRepository)
+					continuousStore = dataStoreSummary.NewSummaries[*types.ContinuousStats, *types.ContinuousBucket](summaryRepository)
 				})
 
 				Context("ReplaceSummary", func() {

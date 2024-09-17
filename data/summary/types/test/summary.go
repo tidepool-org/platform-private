@@ -8,59 +8,15 @@ import (
 	"github.com/tidepool-org/platform/test"
 )
 
-func RandomCGMSummary(userId string) *types.Summary[*types.CGMStats, types.CGMStats] {
-	datum := types.Summary[*types.CGMStats, types.CGMStats]{
-		UserID: userId,
-		Type:   "cgm",
-		Config: types.Config{
-			SchemaVersion:            test.RandomIntFromRange(1, 5),
-			HighGlucoseThreshold:     test.RandomFloat64FromRange(5, 10),
-			VeryHighGlucoseThreshold: test.RandomFloat64FromRange(10, 20),
-			LowGlucoseThreshold:      test.RandomFloat64FromRange(3, 5),
-			VeryLowGlucoseThreshold:  test.RandomFloat64FromRange(0, 3),
+func RandomCGMSummary(userId string) *types.Summary[*types.CGMStats, *types.GlucoseBucket, types.CGMStats, types.GlucoseBucket] {
+	datum := types.Summary[*types.CGMStats, *types.GlucoseBucket, types.CGMStats, types.GlucoseBucket]{
+		SummaryShared: types.SummaryShared{
+			Type:   "",
+			UserID: "",
+			Config: types.Config{},
+			Dates:  types.Dates{},
 		},
-		Dates: types.Dates{
-			LastUpdatedDate:   test.RandomTime(),
-			HasLastUploadDate: test.RandomBool(),
-			LastUploadDate:    pointer.FromAny(test.RandomTime()),
-			HasFirstData:      test.RandomBool(),
-			FirstData:         pointer.FromAny(test.RandomTime()),
-			HasLastData:       test.RandomBool(),
-			LastData:          pointer.FromAny(test.RandomTime()),
-			HasOutdatedSince:  test.RandomBool(),
-			OutdatedSince:     pointer.FromAny(test.RandomTime()),
-		},
-		Stats: &types.CGMStats{
-			TotalHours:    test.RandomIntFromRange(1, 720),
-			Periods:       make(map[string]*types.CGMPeriod),
-			OffsetPeriods: make(map[string]*types.CGMPeriod),
-
-			// we only make 2, as its lighter and 2 vs 14 vs 90 isn't very different here.
-			Buckets: make([]*types.Bucket[*types.CGMBucketData, types.CGMBucketData], 2),
-		},
-	}
-
-	for i := 0; i < len(datum.Stats.Buckets); i++ {
-		datum.Stats.Buckets[i] = &types.Bucket[*types.CGMBucketData, types.CGMBucketData]{
-			Date:           test.RandomTime(),
-			LastRecordTime: test.RandomTime(),
-			Data: &types.CGMBucketData{
-				LastRecordDuration: test.RandomIntFromRange(1, 10),
-				TargetMinutes:      test.RandomIntFromRange(0, 1440),
-				TargetRecords:      test.RandomIntFromRange(0, 288),
-				LowMinutes:         test.RandomIntFromRange(0, 1440),
-				LowRecords:         test.RandomIntFromRange(0, 288),
-				VeryLowMinutes:     test.RandomIntFromRange(0, 1440),
-				VeryLowRecords:     test.RandomIntFromRange(0, 288),
-				HighMinutes:        test.RandomIntFromRange(0, 1440),
-				HighRecords:        test.RandomIntFromRange(0, 288),
-				VeryHighMinutes:    test.RandomIntFromRange(0, 1440),
-				VeryHighRecords:    test.RandomIntFromRange(0, 288),
-				TotalGlucose:       test.RandomFloat64FromRange(0, 10000),
-				TotalMinutes:       test.RandomIntFromRange(0, 1440),
-				TotalRecords:       test.RandomIntFromRange(0, 288),
-			},
-		}
+		Stats: nil,
 	}
 
 	for _, period := range []string{"1d", "7d", "14d", "30d"} {
