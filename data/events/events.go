@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/IBM/sarama"
-
 	"github.com/tidepool-org/go-common/asyncevents"
 	ev "github.com/tidepool-org/go-common/events"
 
@@ -138,10 +137,31 @@ func (r *SaramaRunner) Run() error {
 	if err != nil {
 		return err
 	}
+
 	if err := r.eventsRunner.Run(ctx); err != nil {
 		return errors.Wrap(err, "Unable to Run SaramaRunner")
 	}
+
+	go r.periodicallyTriggerNoDataChecks(ctx)
+
 	return nil
+}
+
+// Ugh, this isn't great, because it will be running on every instance. Unless there's some
+// way we could craft the message such that it would be first to insert wins?
+func (r *SaramaRunner) periodicallyTriggerNoDataChecks(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(100 * time.Millisecond):
+			r.triggerNoDataCheck(ctx)
+		}
+	}
+}
+
+func (r *SaramaRunner) triggerNoDataCheck(ctx context.Context) {
+	// insert a thing into the kafka queue or something
 }
 
 // Terminate adapts platform's event.Runner to work with go-common's
@@ -342,7 +362,7 @@ func (r *CascadingSaramaEventsRunner) buildConsumer(ctx context.Context, idx int
 			Logger:    r.Logger,
 		}
 	}
-	if delay > 0 {
+	if delay > 0 { // TODO: this probably needs re-evaluation in light of the not-before changes
 		consumer = &NotBeforeConsumer{
 			Consumer: consumer,
 			Logger:   r.Logger,

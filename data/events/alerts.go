@@ -26,13 +26,13 @@ import (
 )
 
 type Consumer struct {
-	Alerts       AlertsClient
-	Data         store.DataRepository
-	DeviceTokens auth.DeviceTokensClient
-	Evaluator    AlertsEvaluator
-	Permissions  permission.Client
-	Pusher       Pusher
-	Tokens       alerts.TokenProvider
+	Alerts          AlertsClient
+	Data            store.DataRepository
+	DeviceTokens    auth.DeviceTokensClient
+	Evaluator       AlertsEvaluator
+	Permissions     permission.Client
+	Pusher          Pusher
+	Tokens          alerts.TokenProvider
 
 	Logger log.Logger
 }

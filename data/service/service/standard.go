@@ -486,8 +486,9 @@ func (s *Standard) initializeAlertsEventsHandler() error {
 	// In addition to the CloudEventsConfig, additional specific config values
 	// are needed.
 	config := &struct {
-		KafkaAlertsTopics  []string `envconfig:"KAFKA_ALERTS_TOPICS" default:"alerts,deviceData.alerts"`
-		KafkaAlertsGroupID string   `envconfig:"KAFKA_ALERTS_CONSUMER_GROUP" required:"true"`
+		KafkaAlertsTopics     []string `envconfig:"KAFKA_ALERTS_TOPICS" default:"alerts,deviceData.alerts"`
+		KafkaAlertsGroupID    string   `envconfig:"KAFKA_ALERTS_CONSUMER_GROUP" required:"true"`
+		AlertsRunPeriodicJobs bool     `envconfig:"ALERTS_RUN_PERIODIC_JOBS" default:"true"`
 	}{}
 	if err := envconfig.Process("", config); err != nil {
 		return errors.Wrap(err, "Unable to process envconfig")
@@ -525,8 +526,17 @@ func (s *Standard) initializeAlertsEventsHandler() error {
 		},
 	}
 
-	eventsRunner := dataEvents.NewCascadingSaramaEventsRunner(runnerCfg, s.Logger(),
+	var eventsRunner dataEvents.SaramaEventsRunner = dataEvents.NewCascadingSaramaEventsRunner(runnerCfg, s.Logger(),
 		[]time.Duration{0, 1 * time.Second, 2 * time.Second, 3 * time.Second, 5 * time.Second})
+	if config.AlertsRunPeriodicJobs {
+		period := 100 * time.Millisecond
+		task := func(ctx context.Context) error {
+			s.Logger().Info("I'm the periodic task!")
+			return nil
+		}
+		eventsRunner = dataEvents.NewPeriodicDecorator("alerts-cron", period, task, eventsRunner, s.Logger())
+	}
+
 	runner := dataEvents.NewSaramaRunner(eventsRunner)
 	if err := runner.Initialize(); err != nil {
 		return errors.Wrap(err, "Unable to initialize alerts events handler runner")

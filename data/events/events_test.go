@@ -25,6 +25,7 @@ var _ = Describe("SaramaRunner", func() {
 		newTestRunner := func() *SaramaRunner {
 			return NewSaramaRunner(&mockEventsRunner{})
 		}
+
 		It("starts with Run() and stops with Terminate()", func() {
 			r := newTestRunner()
 			var runErr error
@@ -165,7 +166,6 @@ var _ = Describe("NotBeforeConsumer", func() {
 			Expect(err).To(BeNil())
 			Expect(time.Since(start)).To(BeNumerically(">", abortAfter))
 		})
-
 	})
 })
 
