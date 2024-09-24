@@ -96,6 +96,7 @@ func (r *Buckets[B, A]) GetBucketsRange(ctx context.Context, userId string, star
 	}
 
 	opts := options.Find()
+	// many functions depend on working in reverse, if this sort is changed, many changes will be needed.
 	opts.SetSort(bson.D{{Key: "time", Value: -1}})
 	opts.SetBatchSize(200)
 

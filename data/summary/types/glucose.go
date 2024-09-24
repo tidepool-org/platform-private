@@ -211,7 +211,7 @@ func (B *GlucoseBucket) Update(r data.Datum, shared *BucketShared) error {
 }
 
 type GlucosePeriod struct {
-	GlucoseRanges
+	GlucoseRanges `json:",inline" bson:",inline"`
 	HoursWithData int `json:"hoursWithData,omitempty" bson:"hoursWithData,omitempty"`
 	DaysWithData  int `json:"daysWithData,omitempty" bson:"daysWithData,omitempty"`
 
@@ -281,7 +281,7 @@ func (s *GlucoseStats) Init() {
 	s.TotalHours = 0
 }
 
-func (s *GlucoseStats) Update(ctx context.Context, shared SummaryShared, bucketsFetcher fetcher.BucketFetcher[*GlucoseBucket, GlucoseBucket], cursor fetcher.DeviceDataCursor) error {
+func (s *GlucoseStats) Update(ctx context.Context, shared SummaryShared, bucketsFetcher BucketFetcher[*GlucoseBucket, GlucoseBucket], cursor fetcher.DeviceDataCursor) error {
 	// move all of this to a generic method? fetcher interface?
 
 	hasMoreData := true

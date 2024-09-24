@@ -98,14 +98,25 @@ func (r *PatientRealtimeDaysReporter) GetRealtimeDaysForPatients(ctx context.Con
 func (r *PatientRealtimeDaysReporter) GetNumberOfDaysWithRealtimeData(ctx context.Context, buckets fetcher.AnyCursor) (count int, err error) {
 	bucket := types.Bucket[*types.ContinuousBucket, types.ContinuousBucket]{}
 
+	firstBucketTime := time.Time{}
+	nextDay := time.Time{}
+
 	for buckets.Next(ctx) {
 		if err = buckets.Decode(bucket); err != nil {
 			return 0, err
 		}
-		if bucket.Data.Realtime.Records > 0 {
+
+		if firstBucketTime.IsZero() {
+			firstBucketTime = bucket.Time
+		}
+
+		// if before or equal to nextDay
+		if bucket.Time.Compare(nextDay) <= 0 && bucket.Data.Realtime.Records > 0 {
 			count += 1
 
-			// TODO skipping to next day
+			// set nextDay to the day before today, but in the same offset as the first bucket for day counting
+			nextDay = time.Date(bucket.Time.Year(), bucket.Time.Month(), bucket.Time.Day()-1,
+				firstBucketTime.Hour(), firstBucketTime.Minute(), firstBucketTime.Second(), firstBucketTime.Nanosecond(), firstBucketTime.Location())
 		}
 	}
 

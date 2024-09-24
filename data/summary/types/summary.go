@@ -92,7 +92,7 @@ type StatsPt[T Stats, P BucketDataPt[B], B BucketData] interface {
 	GetType() string
 	GetDeviceDataTypes() []string
 	Init()
-	Update(context.Context, SummaryShared, fetcher.BucketFetcher[P, B], fetcher.DeviceDataCursor) error
+	Update(context.Context, SummaryShared, BucketFetcher[P, B], fetcher.DeviceDataCursor) error
 }
 
 type SummaryShared struct {
@@ -104,7 +104,7 @@ type SummaryShared struct {
 }
 
 type Summary[A StatsPt[T, P, B], P BucketDataPt[B], T Stats, B BucketData] struct {
-	SummaryShared
+	SummaryShared `json:",inline" bson:",inline"`
 
 	Stats A `json:"stats" bson:"stats"`
 }

@@ -1,473 +1,209 @@
 package test
 
 import (
-	"time"
-
 	"github.com/tidepool-org/platform/data/summary/types"
 	"github.com/tidepool-org/platform/pointer"
 	"github.com/tidepool-org/platform/test"
 )
 
+func RandomRange(minutes bool) types.Range {
+	t := types.Range{
+		Glucose:  test.RandomFloat64FromRange(1, 20),
+		Percent:  test.RandomFloat64FromRange(0, 1),
+		Variance: test.RandomFloat64FromRange(1, 20),
+		Records:  test.RandomIntFromRange(1, 12*24*30),
+	}
+
+	if minutes {
+		t.Minutes = test.RandomIntFromRange(1, 5*12*24*30)
+	}
+
+	return t
+}
+
+func RandomRanges(minutes bool) types.GlucoseRanges {
+	return types.GlucoseRanges{
+		Total:       RandomRange(minutes),
+		VeryLow:     RandomRange(minutes),
+		Low:         RandomRange(minutes),
+		Target:      RandomRange(minutes),
+		High:        RandomRange(minutes),
+		VeryHigh:    RandomRange(minutes),
+		ExtremeHigh: RandomRange(minutes),
+		AnyLow:      RandomRange(minutes),
+		AnyHigh:     RandomRange(minutes),
+	}
+}
+
+func RandomDates() types.Dates {
+	return types.Dates{
+		LastUpdatedDate:   test.RandomTime(),
+		LastUploadDate:    test.RandomTime(),
+		FirstData:         test.RandomTime(),
+		LastData:          test.RandomTime(),
+		OutdatedSince:     pointer.FromAny(test.RandomTime()),
+		OutdatedReason:    []string{"TESTOutdatedReason"},
+		LastUpdatedReason: []string{"TESTLastUpdatedReason"},
+	}
+}
+
+func RandomConfig() types.Config {
+	return types.Config{
+		SchemaVersion:            test.RandomIntFromRange(1, 5),
+		HighGlucoseThreshold:     test.RandomFloat64FromRange(5, 10),
+		VeryHighGlucoseThreshold: test.RandomFloat64FromRange(10, 20),
+		LowGlucoseThreshold:      test.RandomFloat64FromRange(3, 5),
+		VeryLowGlucoseThreshold:  test.RandomFloat64FromRange(0, 3),
+	}
+}
+
+func RandomGlucosePeriod(minutes bool) *types.GlucosePeriod {
+	return &types.GlucosePeriod{
+		GlucoseRanges:              RandomRanges(minutes),
+		HoursWithData:              test.RandomIntFromRange(1, 1440),
+		DaysWithData:               test.RandomIntFromRange(1, 30),
+		AverageGlucose:             test.RandomFloat64FromRange(1, 20),
+		GlucoseManagementIndicator: test.RandomFloat64FromRange(1, 20),
+		CoefficientOfVariation:     test.RandomFloat64FromRange(1, 20),
+		StandardDeviation:          test.RandomFloat64FromRange(1, 20),
+		AverageDailyRecords:        test.RandomFloat64FromRange(1, 288),
+		Delta:                      nil,
+	}
+}
+
+func RandomContinuousPeriod() *types.ContinuousPeriod {
+	return &types.ContinuousPeriod{
+		ContinuousRanges: types.ContinuousRanges{
+			Realtime: RandomRange(true),
+			Deferred: RandomRange(true),
+			Total:    RandomRange(true),
+		},
+		AverageDailyRecords: test.RandomFloat64FromRange(1, 288),
+	}
+}
+
 func RandomCGMSummary(userId string) *types.Summary[*types.CGMStats, *types.GlucoseBucket, types.CGMStats, types.GlucoseBucket] {
 	datum := types.Summary[*types.CGMStats, *types.GlucoseBucket, types.CGMStats, types.GlucoseBucket]{
 		SummaryShared: types.SummaryShared{
-			Type:   "",
-			UserID: "",
-			Config: types.Config{},
-			Dates:  types.Dates{},
+			Type:   "cgm",
+			UserID: userId,
+			Config: RandomConfig(),
+			Dates:  RandomDates(),
 		},
-		Stats: nil,
+		Stats: &types.CGMStats{
+			GlucoseStats: types.GlucoseStats{
+				Periods:       types.GlucosePeriods{},
+				OffsetPeriods: types.GlucosePeriods{},
+				TotalHours:    test.RandomIntFromRange(1, 1440),
+			},
+		},
 	}
 
 	for _, period := range []string{"1d", "7d", "14d", "30d"} {
-		datum.Stats.Periods[period] = &types.CGMPeriod{
-			HasGlucoseManagementIndicator:   test.RandomBool(),
-			GlucoseManagementIndicator:      pointer.FromAny(test.RandomFloat64FromRange(0, 20)),
-			GlucoseManagementIndicatorDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 20)),
-
-			HasAverageGlucoseMmol:   test.RandomBool(),
-			AverageGlucoseMmol:      pointer.FromAny(test.RandomFloat64FromRange(1, 30)),
-			AverageGlucoseMmolDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 20)),
-
-			HasTotalRecords:   test.RandomBool(),
-			TotalRecords:      pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-			TotalRecordsDelta: pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-
-			HasAverageDailyRecords:   test.RandomBool(),
-			AverageDailyRecords:      pointer.FromAny(test.RandomFloat64FromRange(0, 25920)),
-			AverageDailyRecordsDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 25920)),
-
-			HasTimeCGMUsePercent:   test.RandomBool(),
-			TimeCGMUsePercent:      pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-			TimeCGMUsePercentDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-
-			HasTimeCGMUseMinutes:   test.RandomBool(),
-			TimeCGMUseMinutes:      pointer.FromAny(test.RandomIntFromRange(0, 129600)),
-			TimeCGMUseMinutesDelta: pointer.FromAny(test.RandomIntFromRange(0, 129600)),
-
-			HasTimeCGMUseRecords:   test.RandomBool(),
-			TimeCGMUseRecords:      pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-			TimeCGMUseRecordsDelta: pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-
-			HasTimeInTargetPercent:   test.RandomBool(),
-			TimeInTargetPercent:      pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-			TimeInTargetPercentDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-
-			HasTimeInTargetMinutes:   test.RandomBool(),
-			TimeInTargetMinutes:      pointer.FromAny(test.RandomIntFromRange(0, 129600)),
-			TimeInTargetMinutesDelta: pointer.FromAny(test.RandomIntFromRange(0, 129600)),
-
-			HasTimeInTargetRecords:   test.RandomBool(),
-			TimeInTargetRecords:      pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-			TimeInTargetRecordsDelta: pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-
-			HasTimeInLowPercent:   test.RandomBool(),
-			TimeInLowPercent:      pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-			TimeInLowPercentDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-
-			HasTimeInLowMinutes:   test.RandomBool(),
-			TimeInLowMinutes:      pointer.FromAny(test.RandomIntFromRange(0, 129600)),
-			TimeInLowMinutesDelta: pointer.FromAny(test.RandomIntFromRange(0, 129600)),
-
-			HasTimeInLowRecords:   test.RandomBool(),
-			TimeInLowRecords:      pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-			TimeInLowRecordsDelta: pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-
-			HasTimeInVeryLowPercent:   test.RandomBool(),
-			TimeInVeryLowPercent:      pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-			TimeInVeryLowPercentDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-
-			HasTimeInVeryLowMinutes:   test.RandomBool(),
-			TimeInVeryLowMinutes:      pointer.FromAny(test.RandomIntFromRange(0, 129600)),
-			TimeInVeryLowMinutesDelta: pointer.FromAny(test.RandomIntFromRange(0, 129600)),
-
-			HasTimeInVeryLowRecords:   test.RandomBool(),
-			TimeInVeryLowRecords:      pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-			TimeInVeryLowRecordsDelta: pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-
-			HasTimeInHighPercent:   test.RandomBool(),
-			TimeInHighPercent:      pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-			TimeInHighPercentDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-
-			HasTimeInHighMinutes:   test.RandomBool(),
-			TimeInHighMinutes:      pointer.FromAny(test.RandomIntFromRange(0, 129600)),
-			TimeInHighMinutesDelta: pointer.FromAny(test.RandomIntFromRange(0, 129600)),
-
-			HasTimeInHighRecords:   test.RandomBool(),
-			TimeInHighRecords:      pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-			TimeInHighRecordsDelta: pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-
-			HasTimeInVeryHighPercent:   test.RandomBool(),
-			TimeInVeryHighPercent:      pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-			TimeInVeryHighPercentDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-
-			HasTimeInVeryHighMinutes:   test.RandomBool(),
-			TimeInVeryHighMinutes:      pointer.FromAny(test.RandomIntFromRange(0, 129600)),
-			TimeInVeryHighMinutesDelta: pointer.FromAny(test.RandomIntFromRange(0, 129600)),
-
-			HasTimeInVeryHighRecords:   test.RandomBool(),
-			TimeInVeryHighRecords:      pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-			TimeInVeryHighRecordsDelta: pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-		}
-
-		datum.Stats.OffsetPeriods[period] = &types.CGMPeriod{
-			HasGlucoseManagementIndicator:   test.RandomBool(),
-			GlucoseManagementIndicator:      pointer.FromAny(test.RandomFloat64FromRange(0, 20)),
-			GlucoseManagementIndicatorDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 20)),
-
-			HasAverageGlucoseMmol:   test.RandomBool(),
-			AverageGlucoseMmol:      pointer.FromAny(test.RandomFloat64FromRange(1, 30)),
-			AverageGlucoseMmolDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 20)),
-
-			HasTotalRecords:   test.RandomBool(),
-			TotalRecords:      pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-			TotalRecordsDelta: pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-
-			HasAverageDailyRecords:   test.RandomBool(),
-			AverageDailyRecords:      pointer.FromAny(test.RandomFloat64FromRange(0, 25920)),
-			AverageDailyRecordsDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 25920)),
-
-			HasTimeCGMUsePercent:   test.RandomBool(),
-			TimeCGMUsePercent:      pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-			TimeCGMUsePercentDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-
-			HasTimeCGMUseMinutes:   test.RandomBool(),
-			TimeCGMUseMinutes:      pointer.FromAny(test.RandomIntFromRange(0, 129600)),
-			TimeCGMUseMinutesDelta: pointer.FromAny(test.RandomIntFromRange(0, 129600)),
-
-			HasTimeCGMUseRecords:   test.RandomBool(),
-			TimeCGMUseRecords:      pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-			TimeCGMUseRecordsDelta: pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-
-			HasTimeInTargetPercent:   test.RandomBool(),
-			TimeInTargetPercent:      pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-			TimeInTargetPercentDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-
-			HasTimeInTargetMinutes:   test.RandomBool(),
-			TimeInTargetMinutes:      pointer.FromAny(test.RandomIntFromRange(0, 129600)),
-			TimeInTargetMinutesDelta: pointer.FromAny(test.RandomIntFromRange(0, 129600)),
-
-			HasTimeInTargetRecords:   test.RandomBool(),
-			TimeInTargetRecords:      pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-			TimeInTargetRecordsDelta: pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-
-			HasTimeInLowPercent:   test.RandomBool(),
-			TimeInLowPercent:      pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-			TimeInLowPercentDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-
-			HasTimeInLowMinutes:   test.RandomBool(),
-			TimeInLowMinutes:      pointer.FromAny(test.RandomIntFromRange(0, 129600)),
-			TimeInLowMinutesDelta: pointer.FromAny(test.RandomIntFromRange(0, 129600)),
-
-			HasTimeInLowRecords:   test.RandomBool(),
-			TimeInLowRecords:      pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-			TimeInLowRecordsDelta: pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-
-			HasTimeInVeryLowPercent:   test.RandomBool(),
-			TimeInVeryLowPercent:      pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-			TimeInVeryLowPercentDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-
-			HasTimeInVeryLowMinutes:   test.RandomBool(),
-			TimeInVeryLowMinutes:      pointer.FromAny(test.RandomIntFromRange(0, 129600)),
-			TimeInVeryLowMinutesDelta: pointer.FromAny(test.RandomIntFromRange(0, 129600)),
-
-			HasTimeInVeryLowRecords:   test.RandomBool(),
-			TimeInVeryLowRecords:      pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-			TimeInVeryLowRecordsDelta: pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-
-			HasTimeInHighPercent:   test.RandomBool(),
-			TimeInHighPercent:      pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-			TimeInHighPercentDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-
-			HasTimeInHighMinutes:   test.RandomBool(),
-			TimeInHighMinutes:      pointer.FromAny(test.RandomIntFromRange(0, 129600)),
-			TimeInHighMinutesDelta: pointer.FromAny(test.RandomIntFromRange(0, 129600)),
-
-			HasTimeInHighRecords:   test.RandomBool(),
-			TimeInHighRecords:      pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-			TimeInHighRecordsDelta: pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-
-			HasTimeInVeryHighPercent:   test.RandomBool(),
-			TimeInVeryHighPercent:      pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-			TimeInVeryHighPercentDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-
-			HasTimeInVeryHighMinutes:   test.RandomBool(),
-			TimeInVeryHighMinutes:      pointer.FromAny(test.RandomIntFromRange(0, 129600)),
-			TimeInVeryHighMinutesDelta: pointer.FromAny(test.RandomIntFromRange(0, 129600)),
-
-			HasTimeInVeryHighRecords:   test.RandomBool(),
-			TimeInVeryHighRecords:      pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-			TimeInVeryHighRecordsDelta: pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-		}
+		datum.Stats.Periods[period] = RandomGlucosePeriod(true)
+		datum.Stats.Periods[period].Delta = RandomGlucosePeriod(true)
+		datum.Stats.OffsetPeriods[period] = RandomGlucosePeriod(true)
+		datum.Stats.OffsetPeriods[period].Delta = RandomGlucosePeriod(true)
 	}
 
 	return &datum
 }
 
-func RandomBGMSummary(userId string) *types.Summary[*types.BGMStats, types.BGMStats] {
-	datum := types.Summary[*types.BGMStats, types.BGMStats]{
-		UserID: userId,
-		Type:   "bgm",
-		Config: types.Config{
-			SchemaVersion:            test.RandomIntFromRange(1, 5),
-			HighGlucoseThreshold:     test.RandomFloat64FromRange(5, 10),
-			VeryHighGlucoseThreshold: test.RandomFloat64FromRange(10, 20),
-			LowGlucoseThreshold:      test.RandomFloat64FromRange(3, 5),
-			VeryLowGlucoseThreshold:  test.RandomFloat64FromRange(0, 3),
-		},
-		Dates: types.Dates{
-			LastUpdatedDate:   test.RandomTime(),
-			HasLastUploadDate: test.RandomBool(),
-			LastUploadDate:    pointer.FromAny(test.RandomTime()),
-			HasFirstData:      test.RandomBool(),
-			FirstData:         pointer.FromAny(test.RandomTime()),
-			HasLastData:       test.RandomBool(),
-			LastData:          pointer.FromAny(test.RandomTime()),
-			HasOutdatedSince:  test.RandomBool(),
-			OutdatedSince:     pointer.FromAny(test.RandomTime()),
+func RandomBGMSummary(userId string) *types.Summary[*types.BGMStats, *types.GlucoseBucket, types.BGMStats, types.GlucoseBucket] {
+	datum := types.Summary[*types.BGMStats, *types.GlucoseBucket, types.BGMStats, types.GlucoseBucket]{
+		SummaryShared: types.SummaryShared{
+			Type:   "bgm",
+			UserID: userId,
+			Config: RandomConfig(),
+			Dates:  RandomDates(),
 		},
 		Stats: &types.BGMStats{
-			TotalHours:    test.RandomIntFromRange(1, 720),
-			Periods:       make(map[string]*types.BGMPeriod),
-			OffsetPeriods: make(map[string]*types.BGMPeriod),
-
-			// we only make 2, as its lighter and 2 vs 14 vs 90 isn't very different here.
-			Buckets: make([]*types.Bucket[*types.BGMBucketData, types.BGMBucketData], 2),
+			GlucoseStats: types.GlucoseStats{
+				Periods:       types.GlucosePeriods{},
+				OffsetPeriods: types.GlucosePeriods{},
+				TotalHours:    test.RandomIntFromRange(1, 1440),
+			},
 		},
 	}
 
-	for i := 0; i < len(datum.Stats.Buckets); i++ {
-		datum.Stats.Buckets[i] = &types.Bucket[*types.BGMBucketData, types.BGMBucketData]{
-			Date:           test.RandomTime(),
-			LastRecordTime: test.RandomTime(),
-			Data: &types.BGMBucketData{
-				TargetRecords:   test.RandomIntFromRange(0, 288),
-				LowRecords:      test.RandomIntFromRange(0, 288),
-				VeryLowRecords:  test.RandomIntFromRange(0, 288),
-				HighRecords:     test.RandomIntFromRange(0, 288),
-				VeryHighRecords: test.RandomIntFromRange(0, 288),
-				TotalGlucose:    test.RandomFloat64FromRange(0, 10000),
-				TotalRecords:    test.RandomIntFromRange(0, 288),
-			},
-		}
-	}
-
 	for _, period := range []string{"1d", "7d", "14d", "30d"} {
-		datum.Stats.Periods[period] = &types.BGMPeriod{
-			HasAverageGlucoseMmol:   test.RandomBool(),
-			AverageGlucoseMmol:      pointer.FromAny(test.RandomFloat64FromRange(1, 30)),
-			AverageGlucoseMmolDelta: pointer.FromAny(test.RandomFloat64FromRange(1, 30)),
-
-			HasTotalRecords:   test.RandomBool(),
-			TotalRecords:      pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-			TotalRecordsDelta: pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-
-			HasAverageDailyRecords:   test.RandomBool(),
-			AverageDailyRecords:      pointer.FromAny(test.RandomFloat64FromRange(0, 25920)),
-			AverageDailyRecordsDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 25920)),
-
-			HasTimeInTargetPercent:   test.RandomBool(),
-			TimeInTargetPercent:      pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-			TimeInTargetPercentDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-
-			HasTimeInTargetRecords:   test.RandomBool(),
-			TimeInTargetRecords:      pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-			TimeInTargetRecordsDelta: pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-
-			HasTimeInLowPercent:   test.RandomBool(),
-			TimeInLowPercent:      pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-			TimeInLowPercentDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-
-			HasTimeInLowRecords:   test.RandomBool(),
-			TimeInLowRecords:      pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-			TimeInLowRecordsDelta: pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-
-			HasTimeInVeryLowPercent:   test.RandomBool(),
-			TimeInVeryLowPercent:      pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-			TimeInVeryLowPercentDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-
-			HasTimeInVeryLowRecords:   test.RandomBool(),
-			TimeInVeryLowRecords:      pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-			TimeInVeryLowRecordsDelta: pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-
-			HasTimeInHighPercent:   test.RandomBool(),
-			TimeInHighPercent:      pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-			TimeInHighPercentDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-
-			HasTimeInHighRecords:   test.RandomBool(),
-			TimeInHighRecords:      pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-			TimeInHighRecordsDelta: pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-
-			HasTimeInVeryHighPercent:   test.RandomBool(),
-			TimeInVeryHighPercent:      pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-			TimeInVeryHighPercentDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-
-			HasTimeInVeryHighRecords:   test.RandomBool(),
-			TimeInVeryHighRecords:      pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-			TimeInVeryHighRecordsDelta: pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-		}
-
-		datum.Stats.OffsetPeriods[period] = &types.BGMPeriod{
-			HasAverageGlucoseMmol:   test.RandomBool(),
-			AverageGlucoseMmol:      pointer.FromAny(test.RandomFloat64FromRange(1, 30)),
-			AverageGlucoseMmolDelta: pointer.FromAny(test.RandomFloat64FromRange(1, 30)),
-
-			HasTotalRecords:   test.RandomBool(),
-			TotalRecords:      pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-			TotalRecordsDelta: pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-
-			HasAverageDailyRecords:   test.RandomBool(),
-			AverageDailyRecords:      pointer.FromAny(test.RandomFloat64FromRange(0, 25920)),
-			AverageDailyRecordsDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 25920)),
-
-			HasTimeInTargetPercent:   test.RandomBool(),
-			TimeInTargetPercent:      pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-			TimeInTargetPercentDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-
-			HasTimeInTargetRecords:   test.RandomBool(),
-			TimeInTargetRecords:      pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-			TimeInTargetRecordsDelta: pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-
-			HasTimeInLowPercent:   test.RandomBool(),
-			TimeInLowPercent:      pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-			TimeInLowPercentDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-
-			HasTimeInLowRecords:   test.RandomBool(),
-			TimeInLowRecords:      pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-			TimeInLowRecordsDelta: pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-
-			HasTimeInVeryLowPercent:   test.RandomBool(),
-			TimeInVeryLowPercent:      pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-			TimeInVeryLowPercentDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-
-			HasTimeInVeryLowRecords:   test.RandomBool(),
-			TimeInVeryLowRecords:      pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-			TimeInVeryLowRecordsDelta: pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-
-			HasTimeInHighPercent:   test.RandomBool(),
-			TimeInHighPercent:      pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-			TimeInHighPercentDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-
-			HasTimeInHighRecords:   test.RandomBool(),
-			TimeInHighRecords:      pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-			TimeInHighRecordsDelta: pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-
-			HasTimeInVeryHighPercent:   test.RandomBool(),
-			TimeInVeryHighPercent:      pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-			TimeInVeryHighPercentDelta: pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-
-			HasTimeInVeryHighRecords:   test.RandomBool(),
-			TimeInVeryHighRecords:      pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-			TimeInVeryHighRecordsDelta: pointer.FromAny(test.RandomIntFromRange(0, 25920)),
-		}
+		datum.Stats.Periods[period] = RandomGlucosePeriod(false)
+		datum.Stats.Periods[period].Delta = RandomGlucosePeriod(false)
+		datum.Stats.OffsetPeriods[period] = RandomGlucosePeriod(false)
+		datum.Stats.OffsetPeriods[period].Delta = RandomGlucosePeriod(false)
 	}
 
 	return &datum
 }
 
-func RandomContinousSummary(userId string) *types.Summary[*types.ContinuousStats, types.ContinuousStats] {
-	datum := types.Summary[*types.ContinuousStats, types.ContinuousStats]{
-		UserID: userId,
-		Type:   "continuous",
-		Config: types.Config{
-			SchemaVersion:            test.RandomIntFromRange(1, 5),
-			HighGlucoseThreshold:     test.RandomFloat64FromRange(5, 10),
-			VeryHighGlucoseThreshold: test.RandomFloat64FromRange(10, 20),
-			LowGlucoseThreshold:      test.RandomFloat64FromRange(3, 5),
-			VeryLowGlucoseThreshold:  test.RandomFloat64FromRange(0, 3),
-		},
-		Dates: types.Dates{
-			LastUpdatedDate:   test.RandomTime(),
-			HasLastUploadDate: test.RandomBool(),
-			LastUploadDate:    pointer.FromAny(test.RandomTime()),
-			HasFirstData:      test.RandomBool(),
-			FirstData:         pointer.FromAny(test.RandomTime()),
-			HasLastData:       test.RandomBool(),
-			LastData:          pointer.FromAny(test.RandomTime()),
-			HasOutdatedSince:  test.RandomBool(),
-			OutdatedSince:     pointer.FromAny(test.RandomTime()),
+func RandomContinuousSummary(userId string) *types.Summary[*types.ContinuousStats, *types.ContinuousBucket, types.ContinuousStats, types.ContinuousBucket] {
+	datum := types.Summary[*types.ContinuousStats, *types.ContinuousBucket, types.ContinuousStats, types.ContinuousBucket]{
+		SummaryShared: types.SummaryShared{
+			Type:   "con",
+			UserID: userId,
+			Config: RandomConfig(),
+			Dates:  RandomDates(),
 		},
 		Stats: &types.ContinuousStats{
-			TotalHours: test.RandomIntFromRange(1, 720),
-			Periods:    make(map[string]*types.ContinuousPeriod),
-
-			// we only make 2, as its lighter and 2 vs 14 vs 90 isn't very different here.
-			Buckets: make([]*types.Bucket[*types.ContinuousBucketData, types.ContinuousBucketData], 2),
+			Periods:    types.ContinuousPeriods{},
+			TotalHours: test.RandomIntFromRange(1, 1440),
 		},
-	}
-
-	for i := 0; i < len(datum.Stats.Buckets); i++ {
-		datum.Stats.Buckets[i] = &types.Bucket[*types.ContinuousBucketData, types.ContinuousBucketData]{
-			Date:           test.RandomTime(),
-			LastRecordTime: test.RandomTime(),
-			Data: &types.ContinuousBucketData{
-				TotalRecords:    test.RandomIntFromRange(1, 1000),
-				RealtimeRecords: test.RandomIntFromRange(1, 1000),
-				DeferredRecords: test.RandomIntFromRange(1, 1000),
-			},
-		}
 	}
 
 	for _, period := range []string{"30d"} {
-		datum.Stats.Periods[period] = &types.ContinuousPeriod{
-			TotalRecords:        pointer.FromAny(test.RandomIntFromRange(1, 1000)),
-			AverageDailyRecords: pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-			RealtimeRecords:     pointer.FromAny(test.RandomIntFromRange(1, 1000)),
-			RealtimePercent:     pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-			DeferredRecords:     pointer.FromAny(test.RandomIntFromRange(1, 1000)),
-			DeferredPercent:     pointer.FromAny(test.RandomFloat64FromRange(0, 1)),
-		}
+		datum.Stats.Periods[period] = RandomContinuousPeriod()
 	}
 
 	return &datum
 }
 
-func NewRealtimeSummary(userId string, startTime time.Time, endTime time.Time, realtimeDays int) *types.Summary[*types.ContinuousStats, types.ContinuousStats] {
-	totalHours := int(endTime.Sub(startTime).Hours())
-	lastData := endTime.Add(59 * time.Minute)
-
-	datum := types.Summary[*types.ContinuousStats, types.ContinuousStats]{
-		UserID: userId,
-		Type:   types.SummaryTypeCGM,
-		Dates: types.Dates{
-			FirstData: &startTime,
-			LastData:  &lastData,
-		},
-		Stats: &types.ContinuousStats{
-			Buckets: make([]*types.Bucket[*types.ContinuousBucketData, types.ContinuousBucketData], totalHours),
-		},
-	}
-
-	var yesterday time.Time
-	var today time.Time
-	var bucketDate time.Time
-	var flaggedDays int
-	var recordCount int
-
-	for i := 0; i < len(datum.Stats.Buckets); i++ {
-		bucketDate = startTime.Add(time.Duration(i) * time.Hour)
-		today = bucketDate.Truncate(time.Hour * 24)
-
-		if flaggedDays < realtimeDays {
-			recordCount = test.RandomIntFromRange(1, 12)
-
-			if today.After(yesterday) {
-				flaggedDays++
-				yesterday = today
-			}
-
-		} else {
-			recordCount = 0
-		}
-
-		datum.Stats.Buckets[i] = &types.Bucket[*types.ContinuousBucketData, types.ContinuousBucketData]{
-			Date: bucketDate,
-			Data: &types.ContinuousBucketData{
-				RealtimeRecords: recordCount,
-				DeferredRecords: recordCount,
-			},
-		}
-	}
-
-	return &datum
-}
+//
+//func NewRealtimeSummary(userId string, startTime time.Time, endTime time.Time, realtimeDays int) *types.Summary[*types.ContinuousStats, types.ContinuousStats] {
+//	totalHours := int(endTime.Sub(startTime).Hours())
+//	lastData := endTime.Add(59 * time.Minute)
+//
+//	datum := types.Summary[*types.ContinuousStats, types.ContinuousStats]{
+//		UserID: userId,
+//		Type:   types.SummaryTypeCGM,
+//		Dates: types.Dates{
+//			FirstData: &startTime,
+//			LastData:  &lastData,
+//		},
+//		Stats: &types.ContinuousStats{
+//			Buckets: make([]*types.Bucket[*types.ContinuousBucketData, types.ContinuousBucketData], totalHours),
+//		},
+//	}
+//
+//	var yesterday time.Time
+//	var today time.Time
+//	var bucketDate time.Time
+//	var flaggedDays int
+//	var recordCount int
+//
+//	for i := 0; i < len(datum.Stats.Buckets); i++ {
+//		bucketDate = startTime.Add(time.Duration(i) * time.Hour)
+//		today = bucketDate.Truncate(time.Hour * 24)
+//
+//		if flaggedDays < realtimeDays {
+//			recordCount = test.RandomIntFromRange(1, 12)
+//
+//			if today.After(yesterday) {
+//				flaggedDays++
+//				yesterday = today
+//			}
+//
+//		} else {
+//			recordCount = 0
+//		}
+//
+//		datum.Stats.Buckets[i] = &types.Bucket[*types.ContinuousBucketData, types.ContinuousBucketData]{
+//			Date: bucketDate,
+//			Data: &types.ContinuousBucketData{
+//				RealtimeRecords: recordCount,
+//				DeferredRecords: recordCount,
+//			},
+//		}
+//	}
+//
+//	return &datum
+//}

@@ -1,12 +1,18 @@
 package types
 
 import (
-	"time"
-
-	"go.mongodb.org/mongo-driver/bson/primitive"
-
+	"context"
 	"github.com/tidepool-org/platform/data"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"time"
 )
+
+type BucketFetcher[B BucketDataPt[A], A BucketData] interface {
+	GetBuckets(ctx context.Context, userId string, startTime, endTime time.Time) (BucketsByTime[B, A], error)
+	GetAllBuckets(ctx context.Context, userId string) (*mongo.Cursor, error)
+	WriteModifiedBuckets(ctx context.Context, startTime time.Time, buckets BucketsByTime[B, A]) error
+}
 
 const minutesPerDay = 60 * 24
 
@@ -40,8 +46,8 @@ type BucketDataPt[A BucketData] interface {
 }
 
 type Bucket[B BucketDataPt[A], A BucketData] struct {
-	BucketShared
-	Data B `json:"data" bson:"data"`
+	BucketShared `json:",inline" bson:",inline"`
+	Data         B `json:"data" bson:"data"`
 }
 
 func NewBucket[B BucketDataPt[A], A BucketData](userId string, date time.Time, typ string) *Bucket[B, A] {
@@ -55,9 +61,9 @@ func NewBucket[B BucketDataPt[A], A BucketData](userId string, date time.Time, t
 	}
 }
 
-func (B *Bucket[B, A]) Update(record data.Datum) error {
-	B.SetModified()
-	return B.Data.Update(record, &B.BucketShared)
+func (BU *Bucket[B, A]) Update(record data.Datum) error {
+	BU.SetModified()
+	return BU.Data.Update(record, &BU.BucketShared)
 }
 
 type BucketsByTime[B BucketDataPt[A], A BucketData] map[time.Time]*Bucket[B, A]

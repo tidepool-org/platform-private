@@ -3,11 +3,11 @@ package types
 import (
 	"context"
 	"errors"
+	"github.com/tidepool-org/platform/data/summary/fetcher"
 	"strconv"
 	"time"
 
 	"github.com/tidepool-org/platform/data"
-	"github.com/tidepool-org/platform/data/summary/fetcher"
 	glucoseDatum "github.com/tidepool-org/platform/data/types/blood/glucose"
 )
 
@@ -50,8 +50,8 @@ func (CR *ContinuousRanges) Finalize() {
 }
 
 type ContinuousBucket struct {
-	BucketShared
-	ContinuousRanges
+	BucketShared     `json:",inline" bson:",inline"`
+	ContinuousRanges `json:",inline" bson:",inline"`
 }
 
 func (B *ContinuousBucket) Add(bucket *ContinuousBucket) {
@@ -78,7 +78,7 @@ func (B *ContinuousBucket) Update(r data.Datum, shared *BucketShared) error {
 }
 
 type ContinuousPeriod struct {
-	ContinuousRanges
+	ContinuousRanges `json:",inline" bson:",inline"`
 
 	AverageDailyRecords float64 `json:"averageDailyRecords" bson:"averageDailyRecords"`
 }
@@ -103,7 +103,7 @@ func (s *ContinuousStats) Init() {
 	s.TotalHours = 0
 }
 
-func (s *ContinuousStats) Update(ctx context.Context, shared SummaryShared, bucketsFetcher fetcher.BucketFetcher[*ContinuousBucket, ContinuousBucket], cursor fetcher.DeviceDataCursor) error {
+func (s *ContinuousStats) Update(ctx context.Context, shared SummaryShared, bucketsFetcher BucketFetcher[*ContinuousBucket, ContinuousBucket], cursor fetcher.DeviceDataCursor) error {
 	// move all of this to a generic method? fetcher interface?
 
 	hasMoreData := true
