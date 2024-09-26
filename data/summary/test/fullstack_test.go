@@ -1,4 +1,4 @@
-package summary_test
+package test_test
 
 //
 //import (

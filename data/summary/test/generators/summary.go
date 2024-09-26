@@ -1,4 +1,4 @@
-package test
+package generators
 
 import (
 	"github.com/tidepool-org/platform/data/summary/types"

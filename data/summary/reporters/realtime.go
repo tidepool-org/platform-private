@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/tidepool-org/platform/data/summary/fetcher"
 	"time"
+
+	"github.com/tidepool-org/platform/data/summary/fetcher"
 
 	clinic "github.com/tidepool-org/clinic/client"
 

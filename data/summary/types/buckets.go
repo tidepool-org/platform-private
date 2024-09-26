@@ -2,10 +2,12 @@ package types
 
 import (
 	"context"
-	"github.com/tidepool-org/platform/data"
+	"time"
+
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
-	"time"
+
+	"github.com/tidepool-org/platform/data"
 )
 
 type BucketFetcher[B BucketDataPt[A], A BucketData] interface {
@@ -25,6 +27,18 @@ type BucketShared struct {
 	LastData  time.Time          `json:"lastTime" bson:"lastTime"`
 
 	modified bool
+}
+
+func (BS *BucketShared) Update(datumTime *time.Time) {
+	if BS.FirstData.IsZero() || datumTime.Before(BS.FirstData) {
+		BS.FirstData = *datumTime
+		BS.SetModified()
+	}
+
+	if BS.LastData.IsZero() || datumTime.After(BS.LastData) {
+		BS.LastData = *datumTime
+		BS.SetModified()
+	}
 }
 
 func (BS *BucketShared) SetModified() {
@@ -62,8 +76,13 @@ func NewBucket[B BucketDataPt[A], A BucketData](userId string, date time.Time, t
 }
 
 func (BU *Bucket[B, A]) Update(record data.Datum) error {
-	BU.SetModified()
-	return BU.Data.Update(record, &BU.BucketShared)
+	err := BU.Data.Update(record, &BU.BucketShared)
+	if err != nil {
+		return err
+	}
+	BU.BucketShared.Update(record.GetTime())
+
+	return nil
 }
 
 type BucketsByTime[B BucketDataPt[A], A BucketData] map[time.Time]*Bucket[B, A]

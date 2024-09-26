@@ -23,12 +23,12 @@ type GlucoseStats struct {
 }
 
 type Range struct {
-	Glucose  float64 `json:"glucose,omitempty" bson:"glucose,omitempty"`
+	Glucose float64 `json:"glucose,omitempty" bson:"glucose,omitempty"`
+	Minutes int     `json:"minutes,omitempty" bson:"minutes,omitempty"`
+	Records int     `json:"records,omitempty" bson:"records,omitempty"`
+
 	Percent  float64 `json:"percent,omitempty" bson:"percent,omitempty"`
 	Variance float64 `json:"variance,omitempty" bson:"variance,omitempty"`
-
-	Minutes int `json:"minutes,omitempty" bson:"minutes,omitempty"`
-	Records int `json:"records,omitempty" bson:"records,omitempty"`
 }
 
 func (R *Range) Add(new *Range) {
@@ -155,20 +155,20 @@ func (R *GlucoseRanges) Update(record glucoseDatum.Glucose, duration int) {
 	normalizedValue := *glucose.NormalizeValueForUnits(record.Value, record.Units)
 
 	if normalizedValue < veryLowBloodGlucose {
-		R.VeryLow.Update(0, duration)
+		R.VeryLow.Update(normalizedValue, duration)
 	} else if normalizedValue > veryHighBloodGlucose {
-		R.VeryHigh.Update(0, duration)
+		R.VeryHigh.Update(normalizedValue, duration)
 
 		// VeryHigh is inclusive of extreme high, this is intentional
 		if normalizedValue >= extremeHighBloodGlucose {
-			R.ExtremeHigh.Update(0, duration)
+			R.ExtremeHigh.Update(normalizedValue, duration)
 		}
 	} else if normalizedValue < lowBloodGlucose {
-		R.Low.Update(0, duration)
+		R.Low.Update(normalizedValue, duration)
 	} else if normalizedValue > highBloodGlucose {
-		R.High.Update(0, duration)
+		R.High.Update(normalizedValue, duration)
 	} else {
-		R.Target.Update(0, duration)
+		R.Target.Update(normalizedValue, duration)
 	}
 
 	R.Total.Update(normalizedValue*float64(duration), duration)
@@ -205,7 +205,6 @@ func (B *GlucoseBucket) Update(r data.Datum, shared *BucketShared) error {
 	B.GlucoseRanges.Update(*record, duration)
 
 	B.LastRecordDuration = duration
-	shared.LastData = *record.Time
 
 	return nil
 }
@@ -399,7 +398,11 @@ func (s *GlucoseStats) CalculateSummary(ctx context.Context, buckets fetcher.Any
 }
 
 func (s *GlucoseStats) CalculateDelta() {
+
 	for k := range s.Periods {
+		s.Periods[k].Delta = &GlucosePeriod{}
+		s.OffsetPeriods[k].Delta = &GlucosePeriod{}
+
 		BinDelta(&s.Periods[k].Total, &s.OffsetPeriods[k].Total, &s.Periods[k].Delta.Total, &s.OffsetPeriods[k].Delta.Total)
 		BinDelta(&s.Periods[k].VeryLow, &s.OffsetPeriods[k].VeryLow, &s.Periods[k].Delta.VeryLow, &s.OffsetPeriods[k].Delta.VeryLow)
 		BinDelta(&s.Periods[k].Low, &s.OffsetPeriods[k].Low, &s.Periods[k].Delta.Low, &s.OffsetPeriods[k].Delta.Low)
