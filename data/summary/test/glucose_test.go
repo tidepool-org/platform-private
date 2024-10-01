@@ -1,5 +1,400 @@
 package test_test
 
+import (
+	"fmt"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	"github.com/tidepool-org/platform/data"
+	. "github.com/tidepool-org/platform/data/summary/test/generators"
+	"github.com/tidepool-org/platform/data/summary/types"
+	"github.com/tidepool-org/platform/data/types/blood/glucose/continuous"
+	"time"
+)
+
+var _ = Describe("Glucose", func() {
+	var bucketTime time.Time
+	var err error
+	var userId string
+
+	BeforeEach(func() {
+		now := time.Now()
+		userId = "1234"
+		bucketTime = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	})
+
+	Context("Ranges", func() {
+		It("range.Update", func() {
+			glucoseRange := types.Range{}
+
+			By("adding 5 minutes of 5mmol")
+			glucoseRange.Update(5, 5)
+			Expect(glucoseRange.Glucose).To(Equal(5.0 * 5.0))
+			Expect(glucoseRange.Records).To(Equal(1))
+			Expect(glucoseRange.Minutes).To(Equal(5))
+
+			By("adding 1 minute of 10mmol")
+			glucoseRange.Update(10, 1)
+			Expect(glucoseRange.Glucose).To(Equal(5.0*5.0 + 10.0))
+			Expect(glucoseRange.Records).To(Equal(2))
+			Expect(glucoseRange.Minutes).To(Equal(6))
+		})
+
+		It("range.Add", func() {
+			firstRange := types.Range{
+				Glucose:  5,
+				Minutes:  5,
+				Records:  5,
+				Percent:  5,
+				Variance: 5,
+			}
+
+			secondRange := types.Range{
+				Glucose:  10,
+				Minutes:  10,
+				Records:  10,
+				Percent:  10,
+				Variance: 10,
+			}
+
+			firstRange.Add(&secondRange)
+
+			Expect(firstRange.Glucose).To(Equal(15.0))
+			Expect(firstRange.Minutes).To(Equal(15))
+			Expect(firstRange.Records).To(Equal(15))
+			Expect(firstRange.Variance).To(Equal(15.0))
+
+			// expect percent untouched, we dont handle percent on add
+			Expect(firstRange.Percent).To(Equal(5.0))
+		})
+
+	})
+
+	Context("bucket.Update", func() {
+		var userBucket *types.Bucket[*types.GlucoseBucket, types.GlucoseBucket]
+		var cgmDatum data.Datum
+
+		It("With a fresh bucket", func() {
+			datumTime := bucketTime.Add(5 * time.Minute)
+			userBucket = types.NewBucket[*types.GlucoseBucket](userId, bucketTime, types.SummaryTypeCGM)
+			cgmDatum = NewGlucoseWithValue(continuous.Type, datumTime, InTargetBloodGlucose)
+
+			err = userBucket.Update(cgmDatum)
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(userBucket.LastData).To(Equal(datumTime))
+			Expect(userBucket.FirstData).To(Equal(datumTime))
+			Expect(userBucket.Time).To(Equal(bucketTime))
+			Expect(userBucket.Data.Target.Records).To(Equal(1))
+			Expect(userBucket.Data.Target.Glucose).To(Equal(InTargetBloodGlucose * 5))
+			Expect(userBucket.Data.Target.Minutes).To(Equal(5))
+			Expect(userBucket.IsModified()).To(BeTrue())
+
+			Expect(userBucket.Data.Target.Records).To(Equal(userBucket.Data.Total.Records))
+			Expect(userBucket.Data.Target.Glucose).To(Equal(userBucket.Data.Total.Glucose))
+			Expect(userBucket.Data.Target.Minutes).To(Equal(userBucket.Data.Total.Minutes))
+		})
+
+		It("With two values in a range", func() {
+			datumTime := bucketTime.Add(5 * time.Minute)
+			userBucket = types.NewBucket[*types.GlucoseBucket](userId, bucketTime, types.SummaryTypeCGM)
+
+			By("Inserting the first data")
+
+			cgmDatum = NewGlucoseWithValue(continuous.Type, datumTime, InTargetBloodGlucose)
+			err = userBucket.Update(cgmDatum)
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(userBucket.FirstData).To(Equal(datumTime))
+			Expect(userBucket.LastData).To(Equal(datumTime))
+			Expect(userBucket.Time).To(Equal(bucketTime))
+			Expect(userBucket.Data.Target.Records).To(Equal(1))
+			Expect(userBucket.Data.Target.Glucose).To(Equal(InTargetBloodGlucose * 5))
+			Expect(userBucket.Data.Target.Minutes).To(Equal(5))
+			Expect(userBucket.IsModified()).To(BeTrue())
+
+			Expect(userBucket.Data.Target.Records).To(Equal(userBucket.Data.Total.Records))
+			Expect(userBucket.Data.Target.Glucose).To(Equal(userBucket.Data.Total.Glucose))
+			Expect(userBucket.Data.Target.Minutes).To(Equal(userBucket.Data.Total.Minutes))
+
+			secondDatumTime := datumTime.Add(5 * time.Minute)
+			cgmDatum = NewGlucoseWithValue(continuous.Type, secondDatumTime, InTargetBloodGlucose)
+
+			By("Inserting the second data")
+
+			err = userBucket.Update(cgmDatum)
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(userBucket.FirstData).To(Equal(datumTime))
+			Expect(userBucket.LastData).To(Equal(secondDatumTime))
+			Expect(userBucket.Time).To(Equal(bucketTime))
+			Expect(userBucket.Data.Target.Records).To(Equal(2))
+			Expect(userBucket.Data.Target.Glucose).To(Equal(InTargetBloodGlucose * 2 * 5))
+			Expect(userBucket.Data.Target.Minutes).To(Equal(10))
+			Expect(userBucket.IsModified()).To(BeTrue())
+
+			Expect(userBucket.Data.Target.Records).To(Equal(userBucket.Data.Total.Records))
+			Expect(userBucket.Data.Target.Glucose).To(Equal(userBucket.Data.Total.Glucose))
+			Expect(userBucket.Data.Target.Minutes).To(Equal(userBucket.Data.Total.Minutes))
+
+		})
+
+		It("With values in all ranges", func() {
+			datumTime := bucketTime.Add(5 * time.Minute)
+			userBucket = types.NewBucket[*types.GlucoseBucket](userId, bucketTime, types.SummaryTypeCGM)
+
+			ranges := map[float64]*types.Range{
+				VeryLowBloodGlucose - 0.1:     &userBucket.Data.VeryLow,
+				LowBloodGlucose - 0.1:         &userBucket.Data.Low,
+				InTargetBloodGlucose + 0.1:    &userBucket.Data.Target,
+				HighBloodGlucose + 0.1:        &userBucket.Data.High,
+				ExtremeHighBloodGlucose + 0.1: &userBucket.Data.ExtremeHigh,
+			}
+
+			expectedGlucose := 0.0
+			expectedMinutes := 0
+			expectedRecords := 0
+
+			expectedAnyLowGlucose := 0.0
+			expectedAnyLowMinutes := 0
+			expectedAnyLowRecords := 0
+
+			expectedAnyHighGlucose := 0.0
+			expectedAnyHighMinutes := 0
+			expectedAnyHighRecords := 0
+
+			expectedVeryHighGlucose := 0.0
+			expectedVeryHighMinutes := 0
+			expectedVeryHighRecords := 0
+
+			for k, v := range ranges {
+				By(fmt.Sprintf("Add a value of %f", k))
+				Expect(v.Records).To(BeZero())
+				Expect(v.Glucose).To(BeZero())
+				Expect(v.Minutes).To(BeZero())
+
+				cgmDatum = NewGlucoseWithValue(continuous.Type, datumTime, k)
+				err = userBucket.Update(cgmDatum)
+				Expect(err).ToNot(HaveOccurred())
+
+				Expect(v.Records).To(Equal(1))
+				Expect(v.Glucose).To(Equal(k * 5))
+				Expect(v.Minutes).To(Equal(5))
+
+				expectedGlucose += k * 5
+				expectedMinutes += 5
+				expectedRecords++
+				Expect(userBucket.Data.Total.Records).To(Equal(expectedRecords))
+				Expect(userBucket.Data.Total.Glucose).To(Equal(expectedGlucose))
+				Expect(userBucket.Data.Total.Minutes).To(Equal(expectedMinutes))
+
+				if k < LowBloodGlucose {
+					expectedAnyLowGlucose += k * 5
+					expectedAnyLowMinutes += 5
+					expectedAnyLowRecords++
+				}
+				Expect(userBucket.Data.AnyLow.Records).To(Equal(expectedAnyLowRecords))
+				Expect(userBucket.Data.AnyLow.Glucose).To(Equal(expectedAnyLowGlucose))
+				Expect(userBucket.Data.AnyLow.Minutes).To(Equal(expectedAnyLowMinutes))
+
+				if k > HighBloodGlucose {
+					expectedAnyHighGlucose += k * 5
+					expectedAnyHighMinutes += 5
+					expectedAnyHighRecords++
+				}
+				Expect(userBucket.Data.AnyHigh.Records).To(Equal(expectedAnyHighRecords))
+				Expect(userBucket.Data.AnyHigh.Glucose).To(Equal(expectedAnyHighGlucose))
+				Expect(userBucket.Data.AnyHigh.Minutes).To(Equal(expectedAnyHighMinutes))
+
+				if k > VeryHighBloodGlucose {
+					expectedVeryHighGlucose += k * 5
+					expectedVeryHighMinutes += 5
+					expectedVeryHighRecords++
+				}
+				Expect(userBucket.Data.VeryHigh.Records).To(Equal(expectedVeryHighRecords))
+				Expect(userBucket.Data.VeryHigh.Glucose).To(Equal(expectedVeryHighGlucose))
+				Expect(userBucket.Data.VeryHigh.Minutes).To(Equal(expectedVeryHighMinutes))
+			}
+		})
+	})
+
+	Context("bucketsByTime.Update", func() {
+		var userBuckets types.BucketsByTime[*types.GlucoseBucket, types.GlucoseBucket]
+		var cgmDatums []data.Datum
+
+		It("With no existing buckets", func() {
+			datumTime := bucketTime.Add(5 * time.Minute)
+			userBuckets = types.BucketsByTime[*types.GlucoseBucket, types.GlucoseBucket]{}
+			cgmDatums = []data.Datum{NewGlucoseWithValue(continuous.Type, datumTime, InTargetBloodGlucose)}
+
+			err = userBuckets.Update(userId, types.SummaryTypeCGM, cgmDatums)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(userBuckets).To(HaveKey(bucketTime))
+		})
+
+		It("Adding to existing buckets", func() {
+			datumTime := bucketTime.Add(5 * time.Minute)
+			userBuckets = types.BucketsByTime[*types.GlucoseBucket, types.GlucoseBucket]{}
+			cgmDatums = []data.Datum{NewGlucoseWithValue(continuous.Type, datumTime, InTargetBloodGlucose)}
+
+			err = userBuckets.Update(userId, types.SummaryTypeCGM, cgmDatums)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(userBuckets).To(HaveKey(bucketTime))
+			Expect(userBuckets[bucketTime].Data.Target.Records).To(Equal(1))
+
+			err = userBuckets.Update(userId, types.SummaryTypeCGM, cgmDatums)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(userBuckets[bucketTime].Data.Target.Records).To(Equal(2))
+		})
+
+		It("Adding to two different buckets at once", func() {
+			datumTime := bucketTime.Add(5 * time.Minute)
+			userBuckets = types.BucketsByTime[*types.GlucoseBucket, types.GlucoseBucket]{}
+			cgmDatums = []data.Datum{
+				NewGlucoseWithValue(continuous.Type, datumTime, InTargetBloodGlucose),
+				NewGlucoseWithValue(continuous.Type, datumTime.Add(time.Hour), LowBloodGlucose-0.1),
+			}
+
+			err = userBuckets.Update(userId, types.SummaryTypeCGM, cgmDatums)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(userBuckets).To(HaveKey(bucketTime))
+			Expect(userBuckets[bucketTime].Data.Target.Records).To(Equal(1))
+			Expect(userBuckets[bucketTime.Add(time.Hour)].Data.Low.Records).To(Equal(1))
+		})
+
+		It("Adding two records to the same bucket at once", func() {
+			datumTime := bucketTime.Add(5 * time.Minute)
+			userBuckets = types.BucketsByTime[*types.GlucoseBucket, types.GlucoseBucket]{}
+			cgmDatums = []data.Datum{
+				NewGlucoseWithValue(continuous.Type, datumTime, InTargetBloodGlucose),
+				NewGlucoseWithValue(continuous.Type, datumTime, LowBloodGlucose-0.1),
+			}
+
+			err = userBuckets.Update(userId, types.SummaryTypeCGM, cgmDatums)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(userBuckets).To(HaveKey(bucketTime))
+			Expect(userBuckets[bucketTime].Data.Target.Records).To(Equal(1))
+			Expect(userBuckets[bucketTime].Data.Low.Records).To(Equal(1))
+		})
+	})
+
+	Context("period", func() {
+		var period types.GlucosePeriod
+
+		It("Add single bucket to an empty period", func() {
+			datumTime := bucketTime.Add(5 * time.Minute)
+			period = types.GlucosePeriod{}
+
+			bucketOne := types.NewBucket[*types.GlucoseBucket](userId, bucketTime, types.SummaryTypeCGM)
+			err = bucketOne.Update(NewGlucoseWithValue(continuous.Type, datumTime, InTargetBloodGlucose))
+			Expect(err).ToNot(HaveOccurred())
+
+			err = period.Update(bucketOne)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(period.Target.Records).To(Equal(1))
+		})
+
+		It("Add duplicate buckets to a period", func() {
+			datumTime := bucketTime.Add(5 * time.Minute)
+			period = types.GlucosePeriod{}
+
+			bucketOne := types.NewBucket[*types.GlucoseBucket](userId, bucketTime, types.SummaryTypeCGM)
+			err = bucketOne.Update(NewGlucoseWithValue(continuous.Type, datumTime, InTargetBloodGlucose))
+			Expect(err).ToNot(HaveOccurred())
+
+			err = period.Update(bucketOne)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(period.Target.Records).To(Equal(1))
+
+			err = period.Update(bucketOne)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("Add three buckets to an empty period on 2 different days, 3 different hours", func() {
+			datumTime := bucketTime.Add(5 * time.Minute)
+			period = types.GlucosePeriod{}
+
+			bucketOne := types.NewBucket[*types.GlucoseBucket](userId, bucketTime, types.SummaryTypeCGM)
+			err = bucketOne.Update(NewGlucoseWithValue(continuous.Type, datumTime, InTargetBloodGlucose))
+			Expect(err).ToNot(HaveOccurred())
+
+			bucketTwo := types.NewBucket[*types.GlucoseBucket](userId, bucketTime.Add(time.Hour), types.SummaryTypeCGM)
+			err = bucketTwo.Update(NewGlucoseWithValue(continuous.Type, datumTime.Add(time.Hour), InTargetBloodGlucose))
+			Expect(err).ToNot(HaveOccurred())
+
+			bucketThree := types.NewBucket[*types.GlucoseBucket](userId, bucketTime.Add(24*time.Hour), types.SummaryTypeCGM)
+			err = bucketThree.Update(NewGlucoseWithValue(continuous.Type, datumTime.Add(24*time.Hour), InTargetBloodGlucose))
+			Expect(err).ToNot(HaveOccurred())
+
+			err = period.Update(bucketOne)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(period.Target.Records).To(Equal(1))
+			Expect(period.HoursWithData).To(Equal(1))
+			Expect(period.DaysWithData).To(Equal(1))
+
+			err = period.Update(bucketTwo)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(period.Target.Records).To(Equal(2))
+			Expect(period.HoursWithData).To(Equal(2))
+			Expect(period.DaysWithData).To(Equal(1))
+
+			err = period.Update(bucketThree)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(period.Target.Records).To(Equal(3))
+			Expect(period.HoursWithData).To(Equal(3))
+			Expect(period.DaysWithData).To(Equal(2))
+		})
+
+		It("Finalize a period", func() {
+			period = types.GlucosePeriod{}
+			var datum data.Datum
+			bucket := types.NewBucket[*types.GlucoseBucket](userId, bucketTime, types.SummaryTypeCGM)
+
+			ranges := map[float64]*types.Range{
+				VeryLowBloodGlucose - 0.1:     &period.VeryLow,
+				LowBloodGlucose - 0.1:         &period.Low,
+				InTargetBloodGlucose + 0.1:    &period.Target,
+				HighBloodGlucose + 0.1:        &period.High,
+				VeryHighBloodGlucose + 0.1:    &period.VeryHigh,
+				ExtremeHighBloodGlucose + 0.1: &period.ExtremeHigh,
+			}
+
+			i := 0
+			for k := range ranges {
+				datum = NewGlucoseWithValue(continuous.Type, bucketTime.Add(5*time.Minute*time.Duration(i)), k)
+				err = bucket.Update(datum)
+				Expect(err).ToNot(HaveOccurred())
+				i++
+			}
+
+			err = period.Update(bucket)
+			Expect(err).ToNot(HaveOccurred())
+			period.Finalize(14)
+
+			// 6 records
+			//2/6 in any*, veryhigh
+			Expect(period.AnyLow.Percent).To(Equal(2.0 / 6.0))
+			Expect(period.AnyLow.Percent).To(Equal(2.0 / 6.0))
+			Expect(period.VeryHigh.Percent).To(Equal(2.0 / 6.0))
+
+			// 1/6 in target, verylow, low, high, extreme
+			Expect(period.Target.Percent).To(Equal(1.0 / 6.0))
+			Expect(period.Low.Percent).To(Equal(1.0 / 6.0))
+			Expect(period.High.Percent).To(Equal(1.0 / 6.0))
+			Expect(period.VeryLow.Percent).To(Equal(1.0 / 6.0))
+			Expect(period.ExtremeHigh.Percent).To(Equal(1.0 / 6.0))
+		})
+
+		It("Update a finalized period", func() {
+			period = types.GlucosePeriod{}
+			period.Finalize(14)
+
+			bucket := types.NewBucket[*types.GlucoseBucket](userId, bucketTime, types.SummaryTypeCGM)
+			err = period.Update(bucket)
+			Expect(err).To(HaveOccurred())
+		})
+	})
+})
+
 //
 //import (
 //	"context"

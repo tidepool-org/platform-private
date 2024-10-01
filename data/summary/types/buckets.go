@@ -2,6 +2,7 @@ package types
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -29,7 +30,14 @@ type BucketShared struct {
 	modified bool
 }
 
-func (BS *BucketShared) Update(datumTime *time.Time) {
+func (BS *BucketShared) Update(datumTime *time.Time) error {
+	// check that datumTime is within the bucket bounds
+	bucketStart := BS.Time
+	bucketEnd := BS.Time.Add(time.Hour)
+	if datumTime.Before(bucketStart) || datumTime.After(bucketEnd) {
+		return fmt.Errorf("datum with time %s is outside the bounds of bucket with bounds %s - %s", datumTime, bucketStart, bucketEnd)
+	}
+
 	if BS.FirstData.IsZero() || datumTime.Before(BS.FirstData) {
 		BS.FirstData = *datumTime
 		BS.SetModified()
@@ -39,6 +47,8 @@ func (BS *BucketShared) Update(datumTime *time.Time) {
 		BS.LastData = *datumTime
 		BS.SetModified()
 	}
+
+	return nil
 }
 
 func (BS *BucketShared) SetModified() {
@@ -76,11 +86,15 @@ func NewBucket[B BucketDataPt[A], A BucketData](userId string, date time.Time, t
 }
 
 func (BU *Bucket[B, A]) Update(record data.Datum) error {
-	err := BU.Data.Update(record, &BU.BucketShared)
+	err := BU.BucketShared.Update(record.GetTime())
 	if err != nil {
 		return err
 	}
-	BU.BucketShared.Update(record.GetTime())
+
+	err = BU.Data.Update(record, &BU.BucketShared)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }

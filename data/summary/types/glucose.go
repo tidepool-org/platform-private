@@ -36,14 +36,15 @@ func (R *Range) Add(new *Range) {
 	R.Glucose += new.Glucose
 	R.Minutes += new.Minutes
 	R.Records += new.Records
-	// We skip percent here as it has to be calculated relative to other ranges
+
+	// skip percent, they cannot be added here
 }
 
 func (R *Range) Update(value float64, duration int) {
 	// this must occur before the counters below as the pre-increment counters are used during calc
 	R.Variance = R.CalculateVariance(value, float64(duration))
 
-	R.Glucose += value
+	R.Glucose += value * float64(duration)
 	R.Minutes += duration
 	R.Records++
 }
@@ -123,8 +124,8 @@ func (R *GlucoseRanges) finalizeMinutes(wallMinutes float64) {
 		R.High.Percent = float64(R.High.Minutes) / wallMinutes
 		R.VeryHigh.Percent = float64(R.VeryHigh.Minutes) / wallMinutes
 		R.ExtremeHigh.Percent = float64(R.ExtremeHigh.Minutes) / wallMinutes
-		R.AnyLow.Percent = float64(R.VeryLow.Minutes+R.Low.Minutes) / wallMinutes
-		R.AnyHigh.Percent = float64(R.VeryHigh.Minutes+R.High.Minutes) / wallMinutes
+		R.AnyLow.Percent = float64(R.AnyLow.Minutes) / wallMinutes
+		R.AnyHigh.Percent = float64(R.AnyHigh.Minutes) / wallMinutes
 	}
 }
 
@@ -136,14 +137,14 @@ func (R *GlucoseRanges) finalizeRecords() {
 	R.High.Percent = float64(R.High.Records) / float64(R.Total.Records)
 	R.VeryHigh.Percent = float64(R.VeryHigh.Records) / float64(R.Total.Records)
 	R.ExtremeHigh.Percent = float64(R.ExtremeHigh.Records) / float64(R.Total.Records)
-	R.AnyLow.Percent = float64(R.VeryLow.Records+R.Low.Records) / float64(R.Total.Records)
-	R.AnyHigh.Percent = float64(R.VeryHigh.Records+R.High.Records) / float64(R.Total.Records)
+	R.AnyLow.Percent = float64(R.AnyLow.Records) / float64(R.Total.Records)
+	R.AnyHigh.Percent = float64(R.AnyHigh.Records) / float64(R.Total.Records)
 }
 
-func (R *GlucoseRanges) Finalize(firstData, lastData time.Time) {
+func (R *GlucoseRanges) Finalize(firstData, lastData time.Time, lastDuration int) {
 	if R.Total.Minutes != 0 {
 		// if our bucket (period, at this point) has minutes
-		wallMinutes := lastData.Sub(firstData).Minutes()
+		wallMinutes := lastData.Sub(firstData).Minutes() + float64(lastDuration)
 		R.finalizeMinutes(wallMinutes)
 	} else {
 		// otherwise, we only have record counts
@@ -156,8 +157,10 @@ func (R *GlucoseRanges) Update(record glucoseDatum.Glucose, duration int) {
 
 	if normalizedValue < veryLowBloodGlucose {
 		R.VeryLow.Update(normalizedValue, duration)
+		R.AnyLow.Update(normalizedValue, duration)
 	} else if normalizedValue > veryHighBloodGlucose {
 		R.VeryHigh.Update(normalizedValue, duration)
+		R.AnyHigh.Update(normalizedValue, duration)
 
 		// VeryHigh is inclusive of extreme high, this is intentional
 		if normalizedValue >= extremeHighBloodGlucose {
@@ -165,13 +168,15 @@ func (R *GlucoseRanges) Update(record glucoseDatum.Glucose, duration int) {
 		}
 	} else if normalizedValue < lowBloodGlucose {
 		R.Low.Update(normalizedValue, duration)
+		R.AnyLow.Update(normalizedValue, duration)
 	} else if normalizedValue > highBloodGlucose {
+		R.AnyHigh.Update(normalizedValue, duration)
 		R.High.Update(normalizedValue, duration)
 	} else {
 		R.Target.Update(normalizedValue, duration)
 	}
 
-	R.Total.Update(normalizedValue*float64(duration), duration)
+	R.Total.Update(normalizedValue, duration)
 }
 
 func (B *GlucoseBucket) Add(bucket *GlucoseBucket) {
@@ -214,9 +219,18 @@ type GlucosePeriod struct {
 	HoursWithData int `json:"hoursWithData,omitempty" bson:"hoursWithData,omitempty"`
 	DaysWithData  int `json:"daysWithData,omitempty" bson:"daysWithData,omitempty"`
 
-	lastCountedDay time.Time
-	lastData       time.Time
-	firstData      time.Time
+	final bool
+
+	firstCountedDay time.Time
+	lastCountedDay  time.Time
+
+	firstCountedHour time.Time
+	lastCountedHour  time.Time
+
+	lastData  time.Time
+	firstData time.Time
+
+	lastRecordDuration int
 
 	AverageGlucose             float64 `json:"averageGlucoseMmol,omitempty" bson:"avgGlucose,omitempty"`
 	GlucoseManagementIndicator float64 `json:"glucoseManagementIndicator,omitempty" bson:"GMI,omitempty"`
@@ -229,38 +243,71 @@ type GlucosePeriod struct {
 	Delta *GlucosePeriod `json:"delta,omitempty" bson:"delta,omitempty"`
 }
 
-func (P GlucosePeriod) Update(bucket *Bucket[*GlucoseBucket, GlucoseBucket]) {
+func (P *GlucosePeriod) IsFinal() bool {
+	return P.final
+}
+
+func (P *GlucosePeriod) Update(bucket *Bucket[*GlucoseBucket, GlucoseBucket]) error {
+	if P.final {
+		return errors.New("period has been finalized, cannot add any data")
+	}
+
 	if bucket.Data.Total.Records == 0 {
-		return
+		return nil
 	}
 
+	// NOTE this works correctly for buckets in forward or backwards order, but not unordered, it must be added with consistent direction
 	// TODO this could use some math with firstData/lastData to work with non-hourly buckets, but today they're hourly.
-	P.HoursWithData++
-
-	if bucket.Time.Before(P.firstData) {
-		P.firstData = bucket.Time
-	}
+	// TODO should this be moved to a generic periods type as a Shared sidecar, days/hours is probably useful to other types
+	// TODO average daily records could also be moved
 
 	if P.lastCountedDay.IsZero() {
+		P.firstCountedDay = bucket.Time
 		P.lastCountedDay = bucket.Time
-		P.lastData = bucket.Time
+
+		P.firstCountedHour = bucket.Time
+		P.lastCountedHour = bucket.Time
+
+		P.firstData = bucket.FirstData
+		P.lastData = bucket.LastData
+
+		P.lastRecordDuration = bucket.Data.LastRecordDuration
 
 		P.DaysWithData++
-	} else if P.lastCountedDay.Sub(bucket.Time).Hours() >= 24 {
-		// if we are >= 24h from the last counted day, advance lastCountedDay to day of bucket, but hhmmss of lastData
-		// to maintain day alignment
-		P.lastCountedDay = time.Date(bucket.Time.Year(), bucket.Time.Month(), bucket.Time.Day(),
-			P.lastData.Hour(), P.lastData.Minute(), P.lastData.Second(), P.lastData.Nanosecond(), P.lastData.Location())
+		P.HoursWithData++
+	} else {
+		if bucket.Time.Before(P.firstCountedHour) {
+			P.HoursWithData++
+			P.firstCountedHour = bucket.Time
+			P.firstData = bucket.FirstData
 
-		P.DaysWithData++
+			if P.firstCountedDay.Sub(bucket.Time).Hours() >= 24 {
+				P.firstCountedDay = bucket.Time
+				P.DaysWithData++
+			}
+		} else if bucket.Time.After(P.lastCountedHour) {
+			P.HoursWithData++
+			P.lastCountedHour = bucket.Time
+			P.lastData = bucket.LastData
+			P.lastRecordDuration = bucket.Data.LastRecordDuration
+
+			if bucket.Time.Sub(P.lastCountedDay).Hours() >= 24 {
+				P.lastCountedDay = bucket.Time
+				P.DaysWithData++
+			}
+		} else {
+			return fmt.Errorf("bucket of time %s is within the existing period range of %s - %s", bucket.Time, P.firstCountedHour, P.lastCountedHour)
+		}
 	}
 
 	P.Add(&bucket.Data.GlucoseRanges)
 
+	return nil
 }
 
-func (P GlucosePeriod) Finalize(days int) {
-	P.GlucoseRanges.Finalize(P.firstData, P.lastData)
+func (P *GlucosePeriod) Finalize(days int) {
+	P.final = true
+	P.GlucoseRanges.Finalize(P.firstData, P.lastData, P.lastRecordDuration)
 	P.AverageGlucose = P.Total.Glucose / float64(P.Total.Minutes)
 
 	// we only add GMI if cgm use >70%, otherwise clear it
@@ -365,7 +412,10 @@ func (s *GlucoseStats) CalculateSummary(ctx context.Context, buckets fetcher.Any
 
 		// only add to offset stats when primary stop point is ahead of offset
 		if nextStopPoint > nextOffsetStopPoint && len(stopPoints) > nextOffsetStopPoint {
-			totalOffsetStats.Update(bucket)
+			err = totalOffsetStats.Update(bucket)
+			if err != nil {
+				return err
+			}
 
 			if bucket.Time.Before(stopPoints[nextOffsetStopPoint]) {
 				s.CalculatePeriod(periodLengths[nextOffsetStopPoint], true, totalOffsetStats)
@@ -376,7 +426,10 @@ func (s *GlucoseStats) CalculateSummary(ctx context.Context, buckets fetcher.Any
 
 		// only count primary stats when the next stop point is a real period
 		if len(stopPoints) > nextStopPoint {
-			totalStats.Update(bucket)
+			err = totalStats.Update(bucket)
+			if err != nil {
+				return err
+			}
 
 			if bucket.Time.Before(stopPoints[nextStopPoint]) {
 				s.CalculatePeriod(periodLengths[nextStopPoint], false, totalStats)
@@ -400,6 +453,7 @@ func (s *GlucoseStats) CalculateSummary(ctx context.Context, buckets fetcher.Any
 func (s *GlucoseStats) CalculateDelta() {
 
 	for k := range s.Periods {
+		// initialize delta pointers, make sure we are starting from a clean delta period/no shared pointers
 		s.Periods[k].Delta = &GlucosePeriod{}
 		s.OffsetPeriods[k].Delta = &GlucosePeriod{}
 
