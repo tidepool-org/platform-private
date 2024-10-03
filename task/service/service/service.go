@@ -3,10 +3,14 @@ package service
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"time"
 
 	"github.com/tidepool-org/platform/clinics"
 	"github.com/tidepool-org/platform/ehr/reconcile"
 	"github.com/tidepool-org/platform/ehr/sync"
+	"github.com/tidepool-org/platform/pointer"
+	"github.com/tidepool-org/platform/throwaway"
 
 	"github.com/tidepool-org/platform/application"
 	"github.com/tidepool-org/platform/client"
@@ -72,6 +76,9 @@ func (s *Service) Initialize(provider application.Provider) error {
 		return err
 	}
 	if err := s.initializeTaskQueue(); err != nil {
+		return err
+	}
+	if err := s.initializeThrowaway(); err != nil {
 		return err
 	}
 	return s.initializeRouter()
@@ -269,6 +276,21 @@ func (s *Service) initializeClinicsClient() error {
 	return nil
 }
 
+func (s *Service) initializeThrowaway() error {
+	go func() {
+		<-time.After(10 * time.Second)
+		create := &task.TaskCreate{
+			Name: pointer.FromAny("throwaway"),
+			Type: throwaway.RunnerType,
+		}
+		if _, err := s.taskClient.CreateTask(context.Background(), create); err != nil {
+			slog.Error("creating throwaway task", "error", err)
+		}
+		slog.Info("throwaway task created")
+	}()
+	return nil
+}
+
 func (s *Service) initializeTaskQueue() error {
 	s.Logger().Debug("Loading task queue config")
 
@@ -329,6 +351,8 @@ func (s *Service) initializeTaskQueue() error {
 		return errors.Wrap(err, "unable to create ehr sync runner")
 	}
 	runners = append(runners, ehrSyncRnnr)
+
+	runners = append(runners, throwaway.NewRunner(nil))
 
 	for _, r := range runners {
 		r := r
