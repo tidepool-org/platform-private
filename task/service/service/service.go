@@ -4,11 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"time"
 
 	"github.com/tidepool-org/platform/clinics"
 	"github.com/tidepool-org/platform/ehr/reconcile"
 	"github.com/tidepool-org/platform/ehr/sync"
+	"github.com/tidepool-org/platform/log"
+	"github.com/tidepool-org/platform/log/devlog"
 	"github.com/tidepool-org/platform/pointer"
 	"github.com/tidepool-org/platform/throwaway"
 
@@ -282,9 +285,29 @@ func (s *Service) initializeThrowaway() error {
 		create := &task.TaskCreate{
 			Name: pointer.FromAny("throwaway"),
 			Type: throwaway.RunnerType,
+			Data: map[string]interface{}{},
 		}
-		if _, err := s.taskClient.CreateTask(context.Background(), create); err != nil {
-			slog.Error("creating throwaway task", "error", err)
+		logger, err := devlog.NewWithDefaults(os.Stderr)
+		if err != nil {
+			slog.Error("error creating devlog", "error", err)
+			return
+		}
+		ctx := log.NewContextWithLogger(context.Background(), logger)
+
+		// taskFilter := task.NewTaskFilter()
+		// taskFilter.Name = pointer.FromString("throwaway")
+		// tasks, err := s.taskClient.ListTasks(ctx, taskFilter, nil)
+		// if err != nil {
+		// 	logger.WithError(err).Error("unable to list tasks")
+		// 	return
+		// }
+		// for _, tsk := range tasks {
+		// 	if err := s.taskClient.DeleteTask(ctx, tsk.ID); err != nil {
+		// 		logger.WithError(err).WithField("id", tsk.ID).Info("deleting throwaway task")
+		// 	}
+		// }
+		if _, err := s.taskClient.CreateTask(ctx, create); err != nil {
+			logger.WithError(err).Info("creating throwaway task")
 		}
 		slog.Info("throwaway task created")
 	}()

@@ -17,6 +17,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/tidepool-org/platform/log"
+	lognull "github.com/tidepool-org/platform/log/null"
 	"github.com/tidepool-org/platform/page"
 	"github.com/tidepool-org/platform/pointer"
 	storeStructuredMongo "github.com/tidepool-org/platform/store/structured/mongo"
@@ -281,8 +282,10 @@ func (t *TaskRepository) CreateTask(ctx context.Context, create *task.TaskCreate
 	}
 
 	now := time.Now()
-	logger := log.LoggerFromContext(ctx).WithFields(log.Fields{"create": create})
-
+	logger := lognull.NewLogger()
+	if ctxLogger := log.LoggerFromContext(ctx); ctxLogger != nil {
+		logger = ctxLogger.WithFields(log.Fields{"create": create})
+	}
 	_, err = t.InsertOne(ctx, tsk)
 	logger.WithFields(log.Fields{"id": tsk.ID, "duration": time.Since(now) / time.Microsecond}).WithError(err).Debug("CreateTask")
 	if err != nil {

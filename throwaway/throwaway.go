@@ -2,9 +2,10 @@ package throwaway
 
 import (
 	"context"
-	"log/slog"
+	"os"
 	"time"
 
+	"github.com/tidepool-org/platform/log/devlog"
 	"github.com/tidepool-org/platform/task"
 	"github.com/tidepool-org/platform/task/queue"
 )
@@ -44,6 +45,10 @@ func (r *Runner) GetRunnerMaximumDuration() time.Duration {
 }
 
 func (r *Runner) Run(ctx context.Context, tsk *task.Task) bool {
-	slog.Debug("RUN!", "task", tsk)
-	return true
+	logger, _ := devlog.NewWithDefaults(os.Stderr)
+	logger.Info("RUN! throwaway task")
+	// This controls when the task runs again, however, the lower bound is the configuration
+	// of the task service, which is 5 seconds.
+	tsk.RepeatAvailableAfter(time.Until(r.timeNow().Add(time.Second)))
+	return false
 }
