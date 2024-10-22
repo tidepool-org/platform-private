@@ -1,6 +1,7 @@
 package generators
 
 import (
+	"github.com/tidepool-org/platform/data/summary/types"
 	"math"
 	"math/rand/v2"
 	"time"
@@ -212,4 +213,51 @@ func NewDataSetCGMVariance(startTime time.Time, hours int, perHour int, Standard
 	}
 
 	return dataSetData, PopStdDev(values)
+}
+
+func CreateGlucoseBuckets(startTime time.Time, hours int, recordsPerBucket int, minutes bool) []*types.Bucket[*types.GlucoseBucket, types.GlucoseBucket] {
+	buckets := make([]*types.Bucket[*types.GlucoseBucket, types.GlucoseBucket], hours)
+
+	for i := 0; i < hours; i++ {
+		buckets[i] = &types.Bucket[*types.GlucoseBucket, types.GlucoseBucket]{
+			BucketShared: types.BucketShared{
+				Type:      types.SummaryTypeCGM,
+				Time:      startTime.Add(time.Hour * time.Duration(i)),
+				FirstData: startTime.Add(time.Hour * time.Duration(i)),
+				LastData:  startTime.Add(time.Hour*time.Duration(i) + time.Hour - 1*time.Millisecond),
+			},
+			Data: &types.GlucoseBucket{
+				LastRecordDuration: 5,
+			},
+		}
+
+		ranges := []*types.Range{
+			&buckets[i].Data.VeryLow,
+			&buckets[i].Data.Low,
+			&buckets[i].Data.Target,
+			&buckets[i].Data.High,
+			&buckets[i].Data.VeryHigh,
+			&buckets[i].Data.AnyLow,
+			&buckets[i].Data.AnyHigh,
+		}
+
+		for k := range ranges {
+			ranges[k].Records = recordsPerBucket
+			ranges[k].Variance = 1
+
+			if minutes {
+				ranges[k].Minutes = recordsPerBucket * 5
+			}
+		}
+
+		buckets[i].Data.Total.Glucose = float64(recordsPerBucket) * InTargetBloodGlucose * 5
+		buckets[i].Data.Total.Records = recordsPerBucket
+		buckets[i].Data.Total.Variance = 1
+
+		if minutes {
+			buckets[i].Data.Total.Minutes = recordsPerBucket * 5
+		}
+	}
+
+	return buckets
 }

@@ -40,11 +40,13 @@ func (R *Range) Add(new *Range) {
 	// skip percent, they cannot be added here
 }
 
-func (R *Range) Update(value float64, duration int) {
+func (R *Range) Update(value float64, duration int, total bool) {
 	// this must occur before the counters below as the pre-increment counters are used during calc
-	R.Variance = R.CalculateVariance(value, float64(duration))
+	if total {
+		R.Variance = R.CalculateVariance(value, float64(duration))
+		R.Glucose += value * float64(duration)
+	}
 
-	R.Glucose += value * float64(duration)
 	R.Minutes += duration
 	R.Records++
 }
@@ -114,15 +116,18 @@ type GlucoseBucket struct {
 	LastRecordDuration int `json:"lastRecordDuration,omitempty" bson:"lastRecordDuration,omitempty"`
 }
 
-func (R *GlucoseRanges) finalizeMinutes(wallMinutes float64) {
-	R.Total.Percent = float64(R.Total.Minutes) / wallMinutes
-
+func (R *GlucoseRanges) finalizeMinutes(wallMinutes float64, days int) {
+	R.Total.Percent = float64(R.Total.Minutes) / float64(days*24*60)
+	fmt.Println(R.Total.Percent, days, R.Total.Minutes)
+	fmt.Println("if ", wallMinutes, " <= ", minutesPerDay, " && ", R.Total.Percent, " > ", 0.7, " ) || (", wallMinutes, " > ", minutesPerDay, " && ", R.Total.Minutes, " > ", minutesPerDay, " )")
 	if (wallMinutes <= minutesPerDay && R.Total.Percent > 0.7) || (wallMinutes > minutesPerDay && R.Total.Minutes > minutesPerDay) {
+		fmt.Println("calculating percentages")
 		R.VeryLow.Percent = float64(R.VeryLow.Minutes) / wallMinutes
 		R.Low.Percent = float64(R.Low.Minutes) / wallMinutes
 		R.Target.Percent = float64(R.Target.Minutes) / wallMinutes
 		R.High.Percent = float64(R.High.Minutes) / wallMinutes
 		R.VeryHigh.Percent = float64(R.VeryHigh.Minutes) / wallMinutes
+		fmt.Println(R.VeryHigh.Percent, R.VeryHigh.Minutes, wallMinutes)
 		R.ExtremeHigh.Percent = float64(R.ExtremeHigh.Minutes) / wallMinutes
 		R.AnyLow.Percent = float64(R.AnyLow.Minutes) / wallMinutes
 		R.AnyHigh.Percent = float64(R.AnyHigh.Minutes) / wallMinutes
@@ -130,7 +135,6 @@ func (R *GlucoseRanges) finalizeMinutes(wallMinutes float64) {
 }
 
 func (R *GlucoseRanges) finalizeRecords() {
-	R.Total.Percent = float64(R.Total.Records) / float64(R.Total.Records)
 	R.VeryLow.Percent = float64(R.VeryLow.Records) / float64(R.Total.Records)
 	R.Low.Percent = float64(R.Low.Records) / float64(R.Total.Records)
 	R.Target.Percent = float64(R.Target.Records) / float64(R.Total.Records)
@@ -141,11 +145,11 @@ func (R *GlucoseRanges) finalizeRecords() {
 	R.AnyHigh.Percent = float64(R.AnyHigh.Records) / float64(R.Total.Records)
 }
 
-func (R *GlucoseRanges) Finalize(firstData, lastData time.Time, lastDuration int) {
+func (R *GlucoseRanges) Finalize(firstData, lastData time.Time, lastDuration int, days int) {
 	if R.Total.Minutes != 0 {
 		// if our bucket (period, at this point) has minutes
 		wallMinutes := lastData.Sub(firstData).Minutes() + float64(lastDuration)
-		R.finalizeMinutes(wallMinutes)
+		R.finalizeMinutes(wallMinutes, days)
 	} else {
 		// otherwise, we only have record counts
 		R.finalizeRecords()
@@ -156,27 +160,27 @@ func (R *GlucoseRanges) Update(record glucoseDatum.Glucose, duration int) {
 	normalizedValue := *glucose.NormalizeValueForUnits(record.Value, record.Units)
 
 	if normalizedValue < veryLowBloodGlucose {
-		R.VeryLow.Update(normalizedValue, duration)
-		R.AnyLow.Update(normalizedValue, duration)
+		R.VeryLow.Update(normalizedValue, duration, false)
+		R.AnyLow.Update(normalizedValue, duration, false)
 	} else if normalizedValue > veryHighBloodGlucose {
-		R.VeryHigh.Update(normalizedValue, duration)
-		R.AnyHigh.Update(normalizedValue, duration)
+		R.VeryHigh.Update(normalizedValue, duration, false)
+		R.AnyHigh.Update(normalizedValue, duration, false)
 
 		// VeryHigh is inclusive of extreme high, this is intentional
 		if normalizedValue >= extremeHighBloodGlucose {
-			R.ExtremeHigh.Update(normalizedValue, duration)
+			R.ExtremeHigh.Update(normalizedValue, duration, false)
 		}
 	} else if normalizedValue < lowBloodGlucose {
-		R.Low.Update(normalizedValue, duration)
-		R.AnyLow.Update(normalizedValue, duration)
+		R.Low.Update(normalizedValue, duration, false)
+		R.AnyLow.Update(normalizedValue, duration, false)
 	} else if normalizedValue > highBloodGlucose {
-		R.AnyHigh.Update(normalizedValue, duration)
-		R.High.Update(normalizedValue, duration)
+		R.AnyHigh.Update(normalizedValue, duration, false)
+		R.High.Update(normalizedValue, duration, false)
 	} else {
-		R.Target.Update(normalizedValue, duration)
+		R.Target.Update(normalizedValue, duration, false)
 	}
 
-	R.Total.Update(normalizedValue, duration)
+	R.Total.Update(normalizedValue, duration, true)
 }
 
 func (B *GlucoseBucket) Add(bucket *GlucoseBucket) {
@@ -307,7 +311,7 @@ func (P *GlucosePeriod) Update(bucket *Bucket[*GlucoseBucket, GlucoseBucket]) er
 
 func (P *GlucosePeriod) Finalize(days int) {
 	P.final = true
-	P.GlucoseRanges.Finalize(P.firstData, P.lastData, P.lastRecordDuration)
+	P.GlucoseRanges.Finalize(P.firstData, P.lastData, P.lastRecordDuration, days)
 	P.AverageGlucose = P.Total.Glucose / float64(P.Total.Minutes)
 
 	// we only add GMI if cgm use >70%, otherwise clear it

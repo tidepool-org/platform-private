@@ -27,16 +27,19 @@ var _ = Describe("Glucose", func() {
 			glucoseRange := types.Range{}
 
 			By("adding 5 minutes of 5mmol")
-			glucoseRange.Update(5, 5)
+			glucoseRange.Update(5, 5, true)
 			Expect(glucoseRange.Glucose).To(Equal(5.0 * 5.0))
 			Expect(glucoseRange.Records).To(Equal(1))
 			Expect(glucoseRange.Minutes).To(Equal(5))
+			Expect(glucoseRange.Variance).To(Equal(0.0))
 
 			By("adding 1 minute of 10mmol")
-			glucoseRange.Update(10, 1)
+			glucoseRange.Update(10, 1, true)
 			Expect(glucoseRange.Glucose).To(Equal(5.0*5.0 + 10.0))
 			Expect(glucoseRange.Records).To(Equal(2))
 			Expect(glucoseRange.Minutes).To(Equal(6))
+			Expect(glucoseRange.Variance).To(Equal(20.833333333333336))
+
 		})
 
 		It("range.Add", func() {
@@ -85,12 +88,10 @@ var _ = Describe("Glucose", func() {
 			Expect(userBucket.FirstData).To(Equal(datumTime))
 			Expect(userBucket.Time).To(Equal(bucketTime))
 			Expect(userBucket.Data.Target.Records).To(Equal(1))
-			Expect(userBucket.Data.Target.Glucose).To(Equal(InTargetBloodGlucose * 5))
 			Expect(userBucket.Data.Target.Minutes).To(Equal(5))
 			Expect(userBucket.IsModified()).To(BeTrue())
 
 			Expect(userBucket.Data.Target.Records).To(Equal(userBucket.Data.Total.Records))
-			Expect(userBucket.Data.Target.Glucose).To(Equal(userBucket.Data.Total.Glucose))
 			Expect(userBucket.Data.Target.Minutes).To(Equal(userBucket.Data.Total.Minutes))
 		})
 
@@ -108,12 +109,10 @@ var _ = Describe("Glucose", func() {
 			Expect(userBucket.LastData).To(Equal(datumTime))
 			Expect(userBucket.Time).To(Equal(bucketTime))
 			Expect(userBucket.Data.Target.Records).To(Equal(1))
-			Expect(userBucket.Data.Target.Glucose).To(Equal(InTargetBloodGlucose * 5))
 			Expect(userBucket.Data.Target.Minutes).To(Equal(5))
 			Expect(userBucket.IsModified()).To(BeTrue())
 
 			Expect(userBucket.Data.Target.Records).To(Equal(userBucket.Data.Total.Records))
-			Expect(userBucket.Data.Target.Glucose).To(Equal(userBucket.Data.Total.Glucose))
 			Expect(userBucket.Data.Target.Minutes).To(Equal(userBucket.Data.Total.Minutes))
 
 			secondDatumTime := datumTime.Add(5 * time.Minute)
@@ -128,12 +127,10 @@ var _ = Describe("Glucose", func() {
 			Expect(userBucket.LastData).To(Equal(secondDatumTime))
 			Expect(userBucket.Time).To(Equal(bucketTime))
 			Expect(userBucket.Data.Target.Records).To(Equal(2))
-			Expect(userBucket.Data.Target.Glucose).To(Equal(InTargetBloodGlucose * 2 * 5))
 			Expect(userBucket.Data.Target.Minutes).To(Equal(10))
 			Expect(userBucket.IsModified()).To(BeTrue())
 
 			Expect(userBucket.Data.Target.Records).To(Equal(userBucket.Data.Total.Records))
-			Expect(userBucket.Data.Target.Glucose).To(Equal(userBucket.Data.Total.Glucose))
 			Expect(userBucket.Data.Target.Minutes).To(Equal(userBucket.Data.Total.Minutes))
 
 		})
@@ -177,7 +174,6 @@ var _ = Describe("Glucose", func() {
 				Expect(err).ToNot(HaveOccurred())
 
 				Expect(v.Records).To(Equal(1))
-				Expect(v.Glucose).To(Equal(k * 5))
 				Expect(v.Minutes).To(Equal(5))
 
 				expectedGlucose += k * 5
@@ -193,7 +189,6 @@ var _ = Describe("Glucose", func() {
 					expectedAnyLowRecords++
 				}
 				Expect(userBucket.Data.AnyLow.Records).To(Equal(expectedAnyLowRecords))
-				Expect(userBucket.Data.AnyLow.Glucose).To(Equal(expectedAnyLowGlucose))
 				Expect(userBucket.Data.AnyLow.Minutes).To(Equal(expectedAnyLowMinutes))
 
 				if k > HighBloodGlucose {
@@ -202,7 +197,6 @@ var _ = Describe("Glucose", func() {
 					expectedAnyHighRecords++
 				}
 				Expect(userBucket.Data.AnyHigh.Records).To(Equal(expectedAnyHighRecords))
-				Expect(userBucket.Data.AnyHigh.Glucose).To(Equal(expectedAnyHighGlucose))
 				Expect(userBucket.Data.AnyHigh.Minutes).To(Equal(expectedAnyHighMinutes))
 
 				if k > VeryHighBloodGlucose {
@@ -211,8 +205,10 @@ var _ = Describe("Glucose", func() {
 					expectedVeryHighRecords++
 				}
 				Expect(userBucket.Data.VeryHigh.Records).To(Equal(expectedVeryHighRecords))
-				Expect(userBucket.Data.VeryHigh.Glucose).To(Equal(expectedVeryHighGlucose))
 				Expect(userBucket.Data.VeryHigh.Minutes).To(Equal(expectedVeryHighMinutes))
+
+				// TODO remove checks for anything but records? we check other stuff in other tests
+				// we should check that total gets variance though
 			}
 		})
 	})
@@ -346,35 +342,19 @@ var _ = Describe("Glucose", func() {
 
 		It("Finalize a period", func() {
 			period = types.GlucosePeriod{}
-			var datum data.Datum
-			bucket := types.NewBucket[*types.GlucoseBucket](userId, bucketTime, types.SummaryTypeCGM)
+			buckets := CreateGlucoseBuckets(bucketTime, 24, 12, true)
 
-			ranges := map[float64]*types.Range{
-				VeryLowBloodGlucose - 0.1:     &period.VeryLow,
-				LowBloodGlucose - 0.1:         &period.Low,
-				InTargetBloodGlucose + 0.1:    &period.Target,
-				HighBloodGlucose + 0.1:        &period.High,
-				VeryHighBloodGlucose + 0.1:    &period.VeryHigh,
-				ExtremeHighBloodGlucose + 0.1: &period.ExtremeHigh,
-			}
-
-			i := 0
-			for k := range ranges {
-				datum = NewGlucoseWithValue(continuous.Type, bucketTime.Add(5*time.Minute*time.Duration(i)), k)
-				err = bucket.Update(datum)
+			for i := range buckets {
+				err = period.Update(buckets[i])
 				Expect(err).ToNot(HaveOccurred())
-				i++
 			}
 
-			err = period.Update(bucket)
-			Expect(err).ToNot(HaveOccurred())
-			period.Finalize(14)
+			period.Finalize(1)
 
-			// 6 records
-			//2/6 in any*, veryhigh
-			Expect(period.AnyLow.Percent).To(Equal(2.0 / 6.0))
-			Expect(period.AnyLow.Percent).To(Equal(2.0 / 6.0))
+			// data is generated at 100% per range, Any* has 200%
 			Expect(period.VeryHigh.Percent).To(Equal(2.0 / 6.0))
+			Expect(period.AnyLow.Percent).To(Equal(2.0 / 6.0))
+			Expect(period.AnyHigh.Percent).To(Equal(2.0 / 6.0))
 
 			// 1/6 in target, verylow, low, high, extreme
 			Expect(period.Target.Percent).To(Equal(1.0 / 6.0))
@@ -382,6 +362,9 @@ var _ = Describe("Glucose", func() {
 			Expect(period.High.Percent).To(Equal(1.0 / 6.0))
 			Expect(period.VeryLow.Percent).To(Equal(1.0 / 6.0))
 			Expect(period.ExtremeHigh.Percent).To(Equal(1.0 / 6.0))
+
+			// TODO check other fields added by finalize
+			// TODO should lastData be with or without duration? probably with.
 		})
 
 		It("Update a finalized period", func() {
