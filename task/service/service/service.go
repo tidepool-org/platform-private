@@ -346,6 +346,12 @@ func (s *Service) initializeTaskQueue() error {
 	}
 	runners = append(runners, ehrSyncRnnr)
 
+	carePartnerRunner, err := NewCarePartnerRunner(s.Logger())
+	if err != nil {
+		return errors.Wrap(err, "unable to create care partner runner")
+	}
+	runners = append(runners, carePartnerRunner)
+
 	for _, r := range runners {
 		r := r
 		if err := taskQueue.RegisterRunner(r); err != nil {

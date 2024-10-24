@@ -260,12 +260,6 @@ func (e *evaluator) authDenied(ctx context.Context) func(ac *alerts.Config) bool
 			"userID":         ac.UserID,
 			"followedUserID": ac.FollowedUserID,
 		})
-		token, err := e.Tokens.ServerSessionToken()
-		if err != nil {
-			lgr.WithError(err).Warn("Unable to confirm permissions; skipping")
-			return false
-		}
-		ctx = auth.NewContextWithServerSessionToken(ctx, token)
 		perms, err := e.Permissions.GetUserPermissions(ctx, ac.UserID, ac.FollowedUserID)
 		if err != nil {
 			lgr.WithError(err).Warn("Unable to confirm permissions; skipping")
