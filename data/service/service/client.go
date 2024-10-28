@@ -89,3 +89,7 @@ func (c *Client) GetContinuousSummary(ctx context.Context, id string) (*types.Su
 func (c *Client) UpdateContinuousSummary(ctx context.Context, id string) (*types.Summary[*types.ContinuousStats, types.ContinuousStats], error) {
 	panic("Not Implemented!")
 }
+
+func (c *Client) UsersWithoutCommunication(ctx context.Context) ([]string, error) {
+	panic("Not Implemented!")
+}

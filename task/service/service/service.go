@@ -346,7 +346,7 @@ func (s *Service) initializeTaskQueue() error {
 	}
 	runners = append(runners, ehrSyncRnnr)
 
-	carePartnerRunner, err := NewCarePartnerRunner(s.Logger())
+	carePartnerRunner, err := NewCarePartnerRunner(s.Logger(), s.dataClient)
 	if err != nil {
 		return errors.Wrap(err, "unable to create care partner runner")
 	}

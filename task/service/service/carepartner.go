@@ -9,12 +9,20 @@ import (
 )
 
 type CarePartnerRunner struct {
-	logger log.Logger
+	logger  log.Logger
+	querier NoCommunicationQuerier
 }
 
-func NewCarePartnerRunner(logger log.Logger) (*CarePartnerRunner, error) {
+type NoCommunicationQuerier interface {
+	// UsersWithoutCommunication returns a slice of user ids for those users that haven't
+	// uploaded data recently.
+	UsersWithoutCommunication(context.Context) ([]string, error)
+}
+
+func NewCarePartnerRunner(logger log.Logger, querier NoCommunicationQuerier) (*CarePartnerRunner, error) {
 	return &CarePartnerRunner{
-		logger: logger,
+		querier: querier,
+		logger:  logger,
 	}, nil
 }
 
@@ -35,12 +43,24 @@ func (r *CarePartnerRunner) GetRunnerDurationMaximum() time.Duration {
 }
 
 func (r *CarePartnerRunner) Run(ctx context.Context, tsk *task.Task) {
+	// RepeatAvailableAfter controls when the task runs again, however, the lower bound is
+	// controlled by the configuration of the task service, which is 5 seconds.
+	tsk.RepeatAvailableAfter(time.Until(time.Now().Add(5 * time.Second)))
+
 	r.logger.Debug("=== this is the care partner task ===")
 
 	// TODO: do the thing; query for patients with followers from whom we haven't seen data
 	// in more than > minutes
 
-	// RepeatAvailableAfter controls when the task runs again, however, the lower bound is
-	// controlled by the configuration of the task service, which is 5 seconds.
-	tsk.RepeatAvailableAfter(time.Until(time.Now().Add(5 * time.Second)))
+	// Step 1: get the user ids for all users for whom we haven't seen data in at least 5
+	// minutes.
+	userIDs, err := r.querier.UsersWithoutCommunication(ctx)
+	if err != nil {
+		r.logger.WithError(err).Info("unable to list users without communications")
+		return
+	}
+
+	for _, userID := range userIDs {
+		r.logger.WithField("userID", userID).Info("checking for follower alerts for non-communicating user")
+	}
 }
