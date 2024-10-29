@@ -653,6 +653,31 @@ func (d *DatumRepository) getAlertableData(ctx context.Context,
 	return cursor, nil
 }
 
+func (d *DatumRepository) ListUsersWithoutCommunication(ctx context.Context) ([]string, error) {
+	start := time.Now().Add(-5 * time.Minute)
+	// TODO this isn't really what we want
+	selector := bson.M{
+		"_active": true,
+		"time":    bson.M{"$gte": start, "$lte": time.Now()},
+	}
+	findOptions := options.Find().SetSort(bson.D{{Key: "time", Value: -1}})
+	cursor, err := d.Find(ctx, selector, findOptions)
+	if err != nil {
+		return nil, platerrors.Wrapf(err, "Unable to list users without communication")
+	}
+	records := []struct {
+		UserID string `bson:"userId"`
+	}{}
+	if err := cursor.All(ctx, &records); err != nil {
+		return nil, err
+	}
+	userIDs := []string{}
+	for _, record := range records {
+		userIDs = append(userIDs, record.UserID)
+	}
+	return userIDs, nil
+}
+
 func (d *DatumRepository) getTimeRange(ctx context.Context, userId string, typ []string, status *data.UserDataStatus) (err error) {
 	timestamp := time.Now().UTC()
 	futureCutoff := timestamp.AddDate(0, 0, 1)

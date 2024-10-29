@@ -305,10 +305,14 @@ func (a NoCommunicationAlert) Evaluate(ctx context.Context, data []*glucose.Gluc
 			break
 		}
 	}
-	if time.Since(newest) > a.Delay.Duration() {
+	return a.EvaluateLastReceived(ctx, newest)
+}
+
+// EvaluateLastReceived TODO should be evaluated to replace Evaluate
+func (a NoCommunicationAlert) EvaluateLastReceived(ctx context.Context, lastReceived time.Time) *Notification {
+	if time.Since(lastReceived) > a.Delay.Duration() {
 		return &Notification{Message: NoCommunicationMessage}
 	}
-
 	return nil
 }
 

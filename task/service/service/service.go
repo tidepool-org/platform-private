@@ -3,14 +3,18 @@ package service
 import (
 	"context"
 
+	"github.com/kelseyhightower/envconfig"
+
 	"github.com/tidepool-org/platform/alerts"
 	"github.com/tidepool-org/platform/clinics"
 	"github.com/tidepool-org/platform/ehr/reconcile"
 	"github.com/tidepool-org/platform/ehr/sync"
+	"github.com/tidepool-org/platform/push"
 
 	"github.com/tidepool-org/platform/application"
 	"github.com/tidepool-org/platform/client"
 	dataClient "github.com/tidepool-org/platform/data/client"
+	"github.com/tidepool-org/platform/data/events"
 	dataSource "github.com/tidepool-org/platform/data/source"
 	dataSourceClient "github.com/tidepool-org/platform/data/source/client"
 	"github.com/tidepool-org/platform/dexcom"
@@ -41,6 +45,7 @@ type Service struct {
 	taskQueue        queue.Queue
 	clinicsClient    clinics.Client
 	alertsClient     *alerts.Client
+	pusher           events.Pusher
 }
 
 func New() *Service {
@@ -73,6 +78,9 @@ func (s *Service) Initialize(provider application.Provider) error {
 		return err
 	}
 	if err := s.initializeAlertsClient(); err != nil {
+		return err
+	}
+	if err := s.initializePusher(); err != nil {
 		return err
 	}
 	if err := s.initializeTaskQueue(); err != nil {
@@ -355,7 +363,7 @@ func (s *Service) initializeTaskQueue() error {
 	if s.alertsClient == nil {
 		s.Logger().Info("alerts client is nil; care partner tasks will not run successfully")
 	}
-	carePartnerRunner, err := NewCarePartnerRunner(s.Logger(), s.alertsClient)
+	carePartnerRunner, err := NewCarePartnerRunner(s.Logger(), s.alertsClient, s.AuthClient(), s.pusher)
 	if err != nil {
 		return errors.Wrap(err, "unable to create care partner runner")
 	}
@@ -388,6 +396,31 @@ func (s *Service) initializeAlertsClient() error {
 		return errors.Wrap(err, "Unable to create platform client for use in alerts client")
 	}
 	s.alertsClient = alerts.NewClient(platformClient, s.AuthClient(), s.Logger())
+	return nil
+}
+
+func (s *Service) initializePusher() error {
+	var err error
+
+	apns2Config := &struct {
+		SigningKey []byte `envconfig:"TIDEPOOL_TASK_SERVICE_PUSHER_APNS_SIGNING_KEY"`
+		KeyID      string `envconfig:"TIDEPOOL_TASK_SERVICE_PUSHER_APNS_KEY_ID"`
+		BundleID   string `envconfig:"TIDEPOOL_TASK_SERVICE_PUSHER_APNS_BUNDLE_ID"`
+		TeamID     string `envconfig:"TIDEPOOL_TASK_SERVICE_PUSHER_APNS_TEAM_ID"`
+	}{}
+	if err := envconfig.Process("", apns2Config); err != nil {
+		return errors.Wrap(err, "Unable to process APNs pusher config")
+	}
+
+	var pusher events.Pusher
+	pusher, err = push.NewAPNSPusherFromKeyData(apns2Config.SigningKey, apns2Config.KeyID,
+		apns2Config.TeamID, apns2Config.BundleID)
+	if err != nil {
+		s.Logger().WithError(err).Warn("falling back to logging of push notifications")
+		pusher = push.NewLogPusher(s.Logger())
+	}
+	s.pusher = pusher
+
 	return nil
 }
 

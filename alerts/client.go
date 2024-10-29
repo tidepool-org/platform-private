@@ -107,8 +107,9 @@ func (c *Client) List(ctx context.Context, followedUserID string) ([]*Config, er
 	return configs, nil
 }
 
+// UsersWithoutCommunication are those that haven't communicated in some time.
 func (c *Client) UsersWithoutCommunication(ctx context.Context) ([]string, error) {
-	url := c.client.ConstructURL("v1", "users", "no_communication")
+	url := c.client.ConstructURL("v1", "users", "without_communication")
 	response := []string{}
 	err := c.request(ctx, http.MethodGet, url, nil, &response)
 	if err != nil {

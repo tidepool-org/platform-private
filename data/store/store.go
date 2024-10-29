@@ -68,6 +68,8 @@ type DatumRepository interface {
 
 	// GetAlertableData queries for the data used to evaluate alerts configurations.
 	GetAlertableData(ctx context.Context, params AlertableParams) (*AlertableResponse, error)
+	// UsersWithoutCommunication for alerting purposes.
+	UsersWithoutCommunication(ctx context.Context) ([]string, error)
 }
 
 // DataRepository is the combined interface of DataSetRepository and

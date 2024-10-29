@@ -84,6 +84,26 @@ func (r *alertsRepo) EnsureIndexes() error {
 	})
 }
 
+// ListNotCommunicating users that haven't uploaded data in a while.
+func (r *alertsRepo) ListNotCommunicating(ctx context.Context) ([]string, error) {
+	filter := bson.D{
+		{Key: "UserId", Value: ""},
+	}
+	cursor, err := r.Find(ctx, filter, nil)
+	if err != nil {
+		return nil, errors.Wrapf(err, "Unable to list not communicating users")
+	}
+	defer cursor.Close(ctx)
+	out := []string{}
+	if err := cursor.All(ctx, &out); err != nil {
+		return nil, errors.Wrapf(err, "Unable to decode userids")
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (r *alertsRepo) filter(cfg *alerts.Config) interface{} {
 	return &alerts.Config{
 		UserID:         cfg.UserID,

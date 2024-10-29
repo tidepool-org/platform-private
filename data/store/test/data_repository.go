@@ -190,6 +190,15 @@ type GetAlertableDataOutput struct {
 	Error    error
 }
 
+type UsersWithoutCommunicationInput struct {
+	Context context.Context
+}
+
+type UsersWithoutCommunicationOutput struct {
+	UserIDs []string
+	Error   error
+}
+
 type DataRepository struct {
 	*test.Closer
 	GetDataSetsForUserByIDInvocations                    int
@@ -263,6 +272,10 @@ type DataRepository struct {
 	GetAlertableDataInvocations int
 	GetAlertableDataInputs      []GetAlertableDataInput
 	GetAlertableDataOutputs     []GetAlertableDataOutput
+
+	UsersWithoutCommunicationInvocations int
+	UsersWithoutCommunicationInputs      []UsersWithoutCommunicationInput
+	UsersWithoutCommunicationOutputs     []UsersWithoutCommunicationOutput
 }
 
 func NewDataRepository() *DataRepository {
@@ -538,6 +551,18 @@ func (d *DataRepository) GetAlertableData(ctx context.Context, params dataStore.
 	output := d.GetAlertableDataOutputs[0]
 	d.GetAlertableDataOutputs = d.GetAlertableDataOutputs[1:]
 	return output.Response, output.Error
+}
+
+func (d *DataRepository) UsersWithoutCommunication(ctx context.Context) ([]string, error) {
+	d.UsersWithoutCommunicationInvocations++
+
+	d.UsersWithoutCommunicationInputs = append(d.UsersWithoutCommunicationInputs, UsersWithoutCommunicationInput{Context: ctx})
+
+	gomega.Expect(d.UsersWithoutCommunicationOutputs).ToNot(gomega.BeEmpty())
+
+	output := d.UsersWithoutCommunicationOutputs[0]
+	d.UsersWithoutCommunicationOutputs = d.UsersWithoutCommunicationOutputs[1:]
+	return output.UserIDs, output.Error
 }
 
 func (d *DataRepository) Expectations() {

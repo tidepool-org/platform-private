@@ -26,7 +26,8 @@ type Context struct {
 	RESTRequest          *rest.Request
 	ResponseWriter       rest.ResponseWriter
 	recorder             *httptest.ResponseRecorder
-	MockAlertsRepository alerts.Repository
+	MockAlertsRepository alerts.
+				Repository
 	MockPermissionClient permission.Client
 }
 

@@ -25,7 +25,7 @@ func AlertsRoutes() []service.Route {
 		service.Post("/v1/users/:userId/followers/:followerUserId/alerts", UpsertAlert, api.RequireAuth),
 		service.Delete("/v1/users/:userId/followers/:followerUserId/alerts", DeleteAlert, api.RequireAuth),
 		service.Get("/v1/users/:userId/followers/alerts", ListAlerts, api.RequireServer),
-		service.Get("/v1/users/no_communication", GetUsersNoCommunication, api.RequireServer),
+		service.Get("/v1/users/without_communication", GetUsersWithoutCommunication, api.RequireServer),
 	}
 }
 
@@ -182,9 +182,10 @@ func ListAlerts(dCtx service.Context) {
 	responder.Data(http.StatusOK, alerts)
 }
 
-func GetUsersNoCommunication(dCtx service.Context) {
+func GetUsersWithoutCommunication(dCtx service.Context) {
 	r := dCtx.Request()
 	ctx := r.Context()
+
 	authDetails := request.GetAuthDetails(ctx)
 	lgr := log.LoggerFromContext(ctx)
 	if err := checkAuthentication(authDetails); err != nil {
@@ -192,9 +193,14 @@ func GetUsersNoCommunication(dCtx service.Context) {
 		dCtx.RespondWithError(platform.ErrorUnauthorized())
 		return
 	}
+	userIDs, err := dCtx.DataRepository().UsersWithoutCommunication(ctx)
+	if err != nil {
+		lgr.WithError(err).Debug("unable to list users without communication")
+		dCtx.RespondWithError(platform.ErrorInternalServerFailure())
+		return
+	}
 
 	responder := request.MustNewResponder(dCtx.Response(), r)
-	userIDs := []string{"test-user-id"}
 	responder.Data(http.StatusOK, userIDs)
 }
 

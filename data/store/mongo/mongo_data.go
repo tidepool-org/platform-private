@@ -195,8 +195,9 @@ func (d *DataRepository) DestroyDataForUserByID(ctx context.Context, userID stri
 	return nil
 }
 
-func (d *DataRepository) mongoClient() *mongo.Client {
-	return d.DatumRepository.Database().Client()
+// ListUsersWithoutCommunication for alerting purposes.
+func (d *DataRepository) UsersWithoutCommunication(ctx context.Context) ([]string, error) {
+	return d.DatumRepository.ListUsersWithoutCommunication(ctx)
 }
 
 func isTypeUpload(typ []string) bool {
