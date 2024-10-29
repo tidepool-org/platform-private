@@ -3,7 +3,6 @@ package client
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -44,9 +43,6 @@ type Client interface {
 	GetOutdatedUserIDs(ctx context.Context, t string, pagination *page.Pagination) (*types.OutdatedSummariesResponse, error)
 	GetMigratableUserIDs(ctx context.Context, t string, pagination *page.Pagination) ([]string, error)
 	BackfillSummaries(ctx context.Context, t string) (int, error)
-
-	// NoCommunicationQuerier can't be used here due to import cycles.
-	UsersWithoutCommunication(context.Context) ([]string, error)
 }
 
 type ClientImpl struct {
@@ -406,8 +402,4 @@ func (s *SerializableDataErrorResponseParser) ParseErrorResponse(ctx context.Con
 		return serializable.Errors.Error
 	}
 	return nil
-}
-
-func (c *ClientImpl) UsersWithoutCommunication(ctx context.Context) ([]string, error) {
-	return nil, fmt.Errorf("unimplemented")
 }

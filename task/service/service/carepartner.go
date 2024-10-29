@@ -43,11 +43,9 @@ func (r *CarePartnerRunner) GetRunnerDurationMaximum() time.Duration {
 }
 
 func (r *CarePartnerRunner) Run(ctx context.Context, tsk *task.Task) {
-	// RepeatAvailableAfter controls when the task runs again, however, the lower bound is
-	// controlled by the configuration of the task service, which is 5 seconds.
-	tsk.RepeatAvailableAfter(time.Until(time.Now().Add(5 * time.Second)))
-
-	r.logger.Debug("=== this is the care partner task ===")
+	// RepeatAvailableAfter controls when the task runs again. The lower bound is controlled
+	// by the configuration of the task service, which is 5 seconds.
+	tsk.RepeatAvailableAfter(time.Until(time.Now().Add(time.Second)))
 
 	// TODO: do the thing; query for patients with followers from whom we haven't seen data
 	// in more than > minutes

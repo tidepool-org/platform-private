@@ -25,6 +25,7 @@ func AlertsRoutes() []service.Route {
 		service.Post("/v1/users/:userId/followers/:followerUserId/alerts", UpsertAlert, api.RequireAuth),
 		service.Delete("/v1/users/:userId/followers/:followerUserId/alerts", DeleteAlert, api.RequireAuth),
 		service.Get("/v1/users/:userId/followers/alerts", ListAlerts, api.RequireServer),
+		service.Get("/v1/users/no_communication", GetUsersNoCommunication, api.RequireServer),
 	}
 }
 
@@ -179,6 +180,22 @@ func ListAlerts(dCtx service.Context) {
 
 	responder := request.MustNewResponder(dCtx.Response(), r)
 	responder.Data(http.StatusOK, alerts)
+}
+
+func GetUsersNoCommunication(dCtx service.Context) {
+	r := dCtx.Request()
+	ctx := r.Context()
+	authDetails := request.GetAuthDetails(ctx)
+	lgr := log.LoggerFromContext(ctx)
+	if err := checkAuthentication(authDetails); err != nil {
+		lgr.Debug("authentication failed")
+		dCtx.RespondWithError(platform.ErrorUnauthorized())
+		return
+	}
+
+	responder := request.MustNewResponder(dCtx.Response(), r)
+	userIDs := []string{"test-user-id"}
+	responder.Data(http.StatusOK, userIDs)
 }
 
 // checkUserIDConsistency verifies the userIDs in a request.

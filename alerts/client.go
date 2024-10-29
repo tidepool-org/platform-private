@@ -107,6 +107,16 @@ func (c *Client) List(ctx context.Context, followedUserID string) ([]*Config, er
 	return configs, nil
 }
 
+func (c *Client) UsersWithoutCommunication(ctx context.Context) ([]string, error) {
+	url := c.client.ConstructURL("v1", "users", "no_communication")
+	response := []string{}
+	err := c.request(ctx, http.MethodGet, url, nil, &response)
+	if err != nil {
+		return nil, errors.Wrap(err, "Unable to request ids of users without communication")
+	}
+	return response, nil
+}
+
 // ConfigLoader abstracts the method by which config values are loaded.
 type ConfigLoader interface {
 	Load(*ClientConfig) error

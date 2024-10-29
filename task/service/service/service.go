@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 
+	"github.com/tidepool-org/platform/alerts"
 	"github.com/tidepool-org/platform/clinics"
 	"github.com/tidepool-org/platform/ehr/reconcile"
 	"github.com/tidepool-org/platform/ehr/sync"
@@ -39,6 +40,7 @@ type Service struct {
 	dexcomClient     dexcom.Client
 	taskQueue        queue.Queue
 	clinicsClient    clinics.Client
+	alertsClient     *alerts.Client
 }
 
 func New() *Service {
@@ -68,6 +70,9 @@ func (s *Service) Initialize(provider application.Provider) error {
 		return err
 	}
 	if err := s.initializeClinicsClient(); err != nil {
+		return err
+	}
+	if err := s.initializeAlertsClient(); err != nil {
 		return err
 	}
 	if err := s.initializeTaskQueue(); err != nil {
@@ -173,6 +178,7 @@ func (s *Service) initializeDataClient() error {
 	if err := cfg.Load(loader); err != nil {
 		return errors.Wrap(err, "unable to load data client config")
 	}
+	s.Logger().WithField("config", cfg).Debug("task service's data client")
 
 	s.Logger().Debug("Creating data client")
 
@@ -346,7 +352,10 @@ func (s *Service) initializeTaskQueue() error {
 	}
 	runners = append(runners, ehrSyncRnnr)
 
-	carePartnerRunner, err := NewCarePartnerRunner(s.Logger(), s.dataClient)
+	if s.alertsClient == nil {
+		s.Logger().Info("alerts client is nil; care partner tasks will not run successfully")
+	}
+	carePartnerRunner, err := NewCarePartnerRunner(s.Logger(), s.alertsClient)
 	if err != nil {
 		return errors.Wrap(err, "unable to create care partner runner")
 	}
@@ -362,6 +371,23 @@ func (s *Service) initializeTaskQueue() error {
 	s.Logger().Debug("Starting task queue")
 	s.taskQueue.Start()
 
+	return nil
+}
+
+func (s *Service) initializeAlertsClient() error {
+	s.Logger().Debug("initializing alerts client")
+	platformConfig := platform.NewConfig()
+	platformConfig.UserAgent = s.UserAgent()
+	reporter := s.ConfigReporter().WithScopes("data", "client")
+	loader := platform.NewConfigReporterLoader(reporter)
+	if err := platformConfig.Load(loader); err != nil {
+		return errors.Wrap(err, "Unable to load alerts client config")
+	}
+	platformClient, err := platform.NewClient(platformConfig, platform.AuthorizeAsService)
+	if err != nil {
+		return errors.Wrap(err, "Unable to create platform client for use in alerts client")
+	}
+	s.alertsClient = alerts.NewClient(platformClient, s.AuthClient(), s.Logger())
 	return nil
 }
 
