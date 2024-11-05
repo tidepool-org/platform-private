@@ -43,7 +43,7 @@ func (r *Buckets[B, A]) GetBuckets(ctx context.Context, userId string, startTime
 		"time":   bson.M{"$gte": startTime, "$lte": endTime},
 	}
 	opts := options.Find()
-	opts.SetSort(bson.D{{Key: "time", Value: 1}})
+	opts.SetSort(bson.D{{Key: "time", Value: -1}})
 
 	cur, err := r.Find(ctx, selector, opts)
 	if errors.Is(err, mongo.ErrNoDocuments) {

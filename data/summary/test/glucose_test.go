@@ -1,6 +1,7 @@
 package test_test
 
 import (
+	"context"
 	"fmt"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -8,6 +9,9 @@ import (
 	. "github.com/tidepool-org/platform/data/summary/test/generators"
 	"github.com/tidepool-org/platform/data/summary/types"
 	"github.com/tidepool-org/platform/data/types/blood/glucose/continuous"
+	"github.com/tidepool-org/platform/log"
+	logTest "github.com/tidepool-org/platform/log/test"
+	"go.mongodb.org/mongo-driver/mongo"
 	"time"
 )
 
@@ -351,20 +355,23 @@ var _ = Describe("Glucose", func() {
 
 			period.Finalize(1)
 
-			// data is generated at 100% per range, Any* has 200%
-			Expect(period.VeryHigh.Percent).To(Equal(2.0 / 6.0))
-			Expect(period.AnyLow.Percent).To(Equal(2.0 / 6.0))
-			Expect(period.AnyHigh.Percent).To(Equal(2.0 / 6.0))
+			// data is generated at 100% per range
+			Expect(period.VeryHigh.Percent).To(Equal(1.0))
+			Expect(period.AnyLow.Percent).To(Equal(1.0))
+			Expect(period.AnyHigh.Percent).To(Equal(1.0))
+			Expect(period.Target.Percent).To(Equal(1.0))
+			Expect(period.Low.Percent).To(Equal(1.0))
+			Expect(period.High.Percent).To(Equal(1.0))
+			Expect(period.VeryLow.Percent).To(Equal(1.0))
+			Expect(period.ExtremeHigh.Percent).To(Equal(1.0))
 
-			// 1/6 in target, verylow, low, high, extreme
-			Expect(period.Target.Percent).To(Equal(1.0 / 6.0))
-			Expect(period.Low.Percent).To(Equal(1.0 / 6.0))
-			Expect(period.High.Percent).To(Equal(1.0 / 6.0))
-			Expect(period.VeryLow.Percent).To(Equal(1.0 / 6.0))
-			Expect(period.ExtremeHigh.Percent).To(Equal(1.0 / 6.0))
+			Expect(period.AverageDailyRecords).To(Equal(12.0 * 24.0))
+			Expect(period.AverageGlucose).To(Equal(InTargetBloodGlucose))
+			Expect(period.GlucoseManagementIndicator).To(Equal(types.CalculateGMI(InTargetBloodGlucose)))
 
-			// TODO check other fields added by finalize
-			// TODO should lastData be with or without duration? probably with.
+			// we only validate these are set here, as this requires more specific validation
+			Expect(period.StandardDeviation).ToNot(Equal(0.0))
+			Expect(period.CoefficientOfVariation).ToNot(Equal(0.0))
 		})
 
 		It("Update a finalized period", func() {
@@ -374,6 +381,83 @@ var _ = Describe("Glucose", func() {
 			bucket := types.NewBucket[*types.GlucoseBucket](userId, bucketTime, types.SummaryTypeCGM)
 			err = period.Update(bucket)
 			Expect(err).To(HaveOccurred())
+		})
+	})
+
+	Context("GlucoseStats", func() {
+		var logger log.Logger
+		var ctx context.Context
+
+		BeforeEach(func() {
+			logger = logTest.NewLogger()
+			ctx = log.NewContextWithLogger(context.Background(), logger)
+		})
+
+		It("Init", func() {
+			s := types.GlucoseStats{}
+			s.Init()
+
+			Expect(s.Periods).ToNot(BeNil())
+			Expect(s.OffsetPeriods).ToNot(BeNil())
+		})
+
+		//It("Update", func() {
+		//	s := types.GlucoseStats{}
+		//	shared := types.SummaryShared{}
+		//	s.Init()
+		//
+		//	err := s.Update(ctx, shared)
+		//	Expect(err).ToNot(HaveOccurred())
+		//
+		//	Expect(s.Periods).ToNot(BeNil())
+		//	Expect(s.OffsetPeriods).ToNot(BeNil())
+		//})
+
+		It("CalculateSummary 1d", func() {
+			s := types.GlucoseStats{}
+			s.Init()
+
+			buckets := CreateGlucoseBuckets(bucketTime, 24, 1, true)
+			bucketsCursor, err := mongo.NewCursorFromDocuments(ConvertToIntArray(buckets), nil, nil)
+			Expect(err).ToNot(HaveOccurred())
+
+			err = s.CalculateSummary(ctx, bucketsCursor)
+			Expect(err).ToNot(HaveOccurred())
+
+			// we should have 1d, but not offset 1d
+			Expect(s.TotalHours).To(Equal(24))
+			Expect(s.Periods).To(Not(BeNil()))
+			Expect(s.OffsetPeriods).To(Not(BeNil()))
+
+			Expect(s.Periods["1d"].Total.Records).To(Equal(24))
+			Expect(s.OffsetPeriods["1d"].Total.Records).To(Equal(0))
+		})
+
+		It("CalculateSummary 2d", func() {
+			s := types.GlucoseStats{}
+			s.Init()
+
+			// add another day
+			buckets := CreateGlucoseBuckets(bucketTime, 48, 1, true)
+			bucketsCursor, err := mongo.NewCursorFromDocuments(ConvertToIntArray(buckets), nil, nil)
+			Expect(err).ToNot(HaveOccurred())
+
+			err = s.CalculateSummary(ctx, bucketsCursor)
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(s.TotalHours).To(Equal(48))
+			Expect(s.Periods).To(Not(BeNil()))
+			Expect(s.OffsetPeriods).To(Not(BeNil()))
+
+			Expect(s.Periods["1d"].Total.Records).To(Equal(24))
+			Expect(s.OffsetPeriods["1d"].Total.Records).To(Equal(24))
+		})
+
+		It("CalculateDelta", func() {
+			s := types.GlucoseStats{}
+			s.Init()
+
+			s.CalculateDelta()
 		})
 	})
 })

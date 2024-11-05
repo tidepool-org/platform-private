@@ -154,4 +154,44 @@ var _ = Describe("Summary", func() {
 			Expect(realMinutes).To(BeNumerically("==", 1440-5))
 		})
 	})
+
+	Context("BinDelta", func() {
+		It("Delta Calc", func() {
+			r1 := &types.Range{
+				Minutes: 5,
+				Records: 6,
+				Percent: 7,
+			}
+			r2 := &types.Range{
+				Minutes: 2,
+				Records: 2,
+				Percent: 2,
+			}
+			d1 := &types.Range{}
+			d2 := &types.Range{}
+			types.BinDelta(r1, r2, d1, d2)
+
+			Expect(d1.Minutes).To(Equal(3))
+			Expect(d2.Minutes).To(Equal(-3))
+
+			Expect(d1.Records).To(Equal(4))
+			Expect(d2.Records).To(Equal(-4))
+
+			Expect(d1.Percent).To(Equal(5.0))
+			Expect(d2.Percent).To(Equal(-5.0))
+		})
+	})
+
+	Context("Delta", func() {
+		It("Delta Calc", func() {
+			a := 5
+			b := 2
+			c := 0
+			d := 0
+			types.Delta(&a, &b, &c, &d)
+
+			Expect(c).To(Equal(3))
+			Expect(d).To(Equal(-3))
+		})
+	})
 })

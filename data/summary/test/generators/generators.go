@@ -21,7 +21,7 @@ const (
 	InTargetBloodGlucose    = 5.0
 )
 
-func ConvertToIntArray[T data.Datum](arr []T) []interface{} {
+func ConvertToIntArray[T any](arr []T) []interface{} {
 	s := make([]interface{}, len(arr))
 	for i, v := range arr {
 		s[i] = v
@@ -218,13 +218,15 @@ func NewDataSetCGMVariance(startTime time.Time, hours int, perHour int, Standard
 func CreateGlucoseBuckets(startTime time.Time, hours int, recordsPerBucket int, minutes bool) []*types.Bucket[*types.GlucoseBucket, types.GlucoseBucket] {
 	buckets := make([]*types.Bucket[*types.GlucoseBucket, types.GlucoseBucket], hours)
 
+	startTime = startTime.Add(time.Hour * time.Duration(hours))
+
 	for i := 0; i < hours; i++ {
 		buckets[i] = &types.Bucket[*types.GlucoseBucket, types.GlucoseBucket]{
 			BucketShared: types.BucketShared{
 				Type:      types.SummaryTypeCGM,
-				Time:      startTime.Add(time.Hour * time.Duration(i)),
-				FirstData: startTime.Add(time.Hour * time.Duration(i)),
-				LastData:  startTime.Add(time.Hour*time.Duration(i) + time.Hour - 1*time.Millisecond),
+				Time:      startTime.Add(-time.Hour * time.Duration(i)),
+				FirstData: startTime.Add(-time.Hour * time.Duration(i)),
+				LastData:  startTime.Add(-time.Hour*time.Duration(i) + time.Hour - 5*time.Minute),
 			},
 			Data: &types.GlucoseBucket{
 				LastRecordDuration: 5,
@@ -237,6 +239,7 @@ func CreateGlucoseBuckets(startTime time.Time, hours int, recordsPerBucket int, 
 			&buckets[i].Data.Target,
 			&buckets[i].Data.High,
 			&buckets[i].Data.VeryHigh,
+			&buckets[i].Data.ExtremeHigh,
 			&buckets[i].Data.AnyLow,
 			&buckets[i].Data.AnyHigh,
 		}

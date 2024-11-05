@@ -118,16 +118,12 @@ type GlucoseBucket struct {
 
 func (R *GlucoseRanges) finalizeMinutes(wallMinutes float64, days int) {
 	R.Total.Percent = float64(R.Total.Minutes) / float64(days*24*60)
-	fmt.Println(R.Total.Percent, days, R.Total.Minutes)
-	fmt.Println("if ", wallMinutes, " <= ", minutesPerDay, " && ", R.Total.Percent, " > ", 0.7, " ) || (", wallMinutes, " > ", minutesPerDay, " && ", R.Total.Minutes, " > ", minutesPerDay, " )")
 	if (wallMinutes <= minutesPerDay && R.Total.Percent > 0.7) || (wallMinutes > minutesPerDay && R.Total.Minutes > minutesPerDay) {
-		fmt.Println("calculating percentages")
 		R.VeryLow.Percent = float64(R.VeryLow.Minutes) / wallMinutes
 		R.Low.Percent = float64(R.Low.Minutes) / wallMinutes
 		R.Target.Percent = float64(R.Target.Minutes) / wallMinutes
 		R.High.Percent = float64(R.High.Minutes) / wallMinutes
 		R.VeryHigh.Percent = float64(R.VeryHigh.Minutes) / wallMinutes
-		fmt.Println(R.VeryHigh.Percent, R.VeryHigh.Minutes, wallMinutes)
 		R.ExtremeHigh.Percent = float64(R.ExtremeHigh.Minutes) / wallMinutes
 		R.AnyLow.Percent = float64(R.AnyLow.Minutes) / wallMinutes
 		R.AnyHigh.Percent = float64(R.AnyHigh.Minutes) / wallMinutes
@@ -310,11 +306,14 @@ func (P *GlucosePeriod) Update(bucket *Bucket[*GlucoseBucket, GlucoseBucket]) er
 }
 
 func (P *GlucosePeriod) Finalize(days int) {
+	if P.final != false {
+		return
+	}
 	P.final = true
 	P.GlucoseRanges.Finalize(P.firstData, P.lastData, P.lastRecordDuration, days)
 	P.AverageGlucose = P.Total.Glucose / float64(P.Total.Minutes)
 
-	// we only add GMI if cgm use >70%, otherwise clear it
+	// we only add GMI if cgm use >70%
 	if P.Total.Percent > 0.7 {
 		P.GlucoseManagementIndicator = CalculateGMI(P.AverageGlucose)
 	}
@@ -395,6 +394,7 @@ func (s *GlucoseStats) CalculateSummary(ctx context.Context, buckets fetcher.Any
 	totalOffsetStats := GlucosePeriod{}
 	var err error
 	var stopPoints []time.Time
+	var offsetStopPoints []time.Time
 
 	bucket := &Bucket[*GlucoseBucket, GlucoseBucket]{}
 
@@ -405,7 +405,7 @@ func (s *GlucoseStats) CalculateSummary(ctx context.Context, buckets fetcher.Any
 
 		// We should have the newest (last) bucket here, use its date for breakpoints
 		if stopPoints == nil {
-			stopPoints = calculateStopPoints(bucket.Time)
+			stopPoints, offsetStopPoints = calculateStopPoints(bucket.Time)
 		}
 
 		if bucket.Data.Total.Records == 0 {
@@ -414,30 +414,30 @@ func (s *GlucoseStats) CalculateSummary(ctx context.Context, buckets fetcher.Any
 
 		s.TotalHours++
 
-		// only add to offset stats when primary stop point is ahead of offset
-		if nextStopPoint > nextOffsetStopPoint && len(stopPoints) > nextOffsetStopPoint {
-			err = totalOffsetStats.Update(bucket)
-			if err != nil {
-				return err
-			}
-
-			if bucket.Time.Before(stopPoints[nextOffsetStopPoint]) {
-				s.CalculatePeriod(periodLengths[nextOffsetStopPoint], true, totalOffsetStats)
-				nextOffsetStopPoint++
-				totalOffsetStats = GlucosePeriod{}
-			}
-		}
-
 		// only count primary stats when the next stop point is a real period
 		if len(stopPoints) > nextStopPoint {
+			if bucket.Time.Compare(stopPoints[nextStopPoint]) <= 0 {
+				s.CalculatePeriod(periodLengths[nextStopPoint], false, totalStats)
+				nextStopPoint++
+			}
+
 			err = totalStats.Update(bucket)
 			if err != nil {
 				return err
 			}
+		}
 
-			if bucket.Time.Before(stopPoints[nextStopPoint]) {
-				s.CalculatePeriod(periodLengths[nextStopPoint], false, totalStats)
-				nextStopPoint++
+		// only add to offset stats when primary stop point is ahead of offset
+		if nextStopPoint > nextOffsetStopPoint && len(stopPoints) > nextOffsetStopPoint {
+			if bucket.Time.Compare(offsetStopPoints[nextOffsetStopPoint]) <= 0 {
+				s.CalculatePeriod(periodLengths[nextOffsetStopPoint], true, totalOffsetStats)
+				nextOffsetStopPoint++
+				totalOffsetStats = GlucosePeriod{}
+			}
+
+			err = totalOffsetStats.Update(bucket)
+			if err != nil {
+				return err
 			}
 		}
 	}

@@ -174,7 +174,7 @@ func (s *ContinuousStats) CalculateSummary(ctx context.Context, buckets fetcher.
 
 		// We should have the newest (last) bucket here, use its date for breakpoints
 		if stopPoints == nil {
-			stopPoints = calculateStopPoints(bucket.Time)
+			stopPoints, _ = calculateStopPoints(bucket.Time)
 		}
 
 		if bucket.Data.Total.Records == 0 {
