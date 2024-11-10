@@ -9,6 +9,7 @@ import (
 	"github.com/tidepool-org/platform/data"
 	"github.com/tidepool-org/platform/errors"
 	"github.com/tidepool-org/platform/id"
+	"github.com/tidepool-org/platform/metadata"
 	"github.com/tidepool-org/platform/pointer"
 	"github.com/tidepool-org/platform/structure"
 	structureValidator "github.com/tidepool-org/platform/structure/validator"
@@ -30,6 +31,24 @@ func Statuses() []string {
 	}
 }
 
+type Create struct {
+	Metadata *metadata.Metadata `json:"metadata,omitempty"`
+}
+
+func NewCreate() *Create {
+	return &Create{}
+}
+
+func (c *Create) Parse(parser structure.ObjectParser) {
+	c.Metadata = metadata.ParseMetadata(parser.WithReferenceObjectParser("metadata"))
+}
+
+func (c *Create) Validate(validator structure.Validator) {
+	if c.Metadata != nil {
+		c.Metadata.Validate(validator.WithReference("metadata"))
+	}
+}
+
 type Content struct {
 	Body      io.ReadCloser
 	DigestMD5 *string
@@ -47,22 +66,24 @@ func (c *Content) Validate(validator structure.Validator) {
 }
 
 type Raw struct {
-	ID           *string    `json:"id,omitempty" bson:"id,omitempty"`
-	UserID       *string    `json:"userId,omitempty" bson:"userId,omitempty"`
-	DataSetID    *string    `json:"dataSetId,omitempty" bson:"dataSetId,omitempty"`
-	DigestMD5    *string    `json:"digestMD5,omitempty" bson:"digestMD5,omitempty"`
-	Size         *int       `json:"size,omitempty" bson:"size,omitempty"`
-	Status       *string    `json:"status,omitempty" bson:"status,omitempty"`
-	CreatedTime  *time.Time `json:"createdTime,omitempty" bson:"createdTime,omitempty"`
-	ModifiedTime *time.Time `json:"modifiedTime,omitempty" bson:"modifiedTime,omitempty"`
-	DeletedTime  *time.Time `json:"deletedTime,omitempty" bson:"deletedTime,omitempty"`
-	Revision     *int       `json:"revision,omitempty" bson:"revision,omitempty"`
+	ID           *string            `json:"id,omitempty" bson:"id,omitempty"`
+	UserID       *string            `json:"userId,omitempty" bson:"userId,omitempty"`
+	DataSetID    *string            `json:"dataSetId,omitempty" bson:"dataSetId,omitempty"`
+	Metadata     *metadata.Metadata `json:"metadata,omitempty" bson:"metadata,omitempty"`
+	DigestMD5    *string            `json:"digestMD5,omitempty" bson:"digestMD5,omitempty"`
+	Size         *int               `json:"size,omitempty" bson:"size,omitempty"`
+	Status       *string            `json:"status,omitempty" bson:"status,omitempty"`
+	CreatedTime  *time.Time         `json:"createdTime,omitempty" bson:"createdTime,omitempty"`
+	ModifiedTime *time.Time         `json:"modifiedTime,omitempty" bson:"modifiedTime,omitempty"`
+	DeletedTime  *time.Time         `json:"deletedTime,omitempty" bson:"deletedTime,omitempty"`
+	Revision     *int               `json:"revision,omitempty" bson:"revision,omitempty"`
 }
 
 func (r *Raw) Parse(parser structure.ObjectParser) {
 	r.ID = parser.String("id")
 	r.UserID = parser.String("userId")
 	r.DataSetID = parser.String("dataSetId")
+	r.Metadata = metadata.ParseMetadata(parser.WithReferenceObjectParser("metadata"))
 	r.DigestMD5 = parser.String("digestMD5")
 	r.Size = parser.Int("size")
 	r.Status = parser.String("status")
@@ -76,6 +97,9 @@ func (r *Raw) Validate(validator structure.Validator) {
 	validator.String("id", r.ID).Exists().Using(IDValidator)
 	validator.String("userId", r.UserID).Exists().Using(user.IDValidator)
 	validator.String("dataSetId", r.DataSetID).Exists().Using(data.SetIDValidator)
+	if r.Metadata != nil {
+		r.Metadata.Validate(validator.WithReference("metadata"))
+	}
 	validator.String("digestMD5", r.DigestMD5).Exists().Using(crypto.Base64EncodedMD5HashValidator)
 	validator.Int("size", r.Size).Exists().GreaterThanOrEqualTo(0)
 	validator.String("status", r.Status).Exists().OneOf(Statuses()...)

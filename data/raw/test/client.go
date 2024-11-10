@@ -38,18 +38,18 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // Create mocks base method.
-func (m *MockClient) Create(ctx context.Context, userID, dataSetID string, content *raw.Content) (*raw.Raw, error) {
+func (m *MockClient) Create(ctx context.Context, dataSetID string, create *raw.Create, content *raw.Content) (*raw.Raw, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Create", ctx, userID, dataSetID, content)
+	ret := m.ctrl.Call(m, "Create", ctx, dataSetID, create, content)
 	ret0, _ := ret[0].(*raw.Raw)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Create indicates an expected call of Create.
-func (mr *MockClientMockRecorder) Create(ctx, userID, dataSetID, content interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) Create(ctx, dataSetID, create, content interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockClient)(nil).Create), ctx, userID, dataSetID, content)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockClient)(nil).Create), ctx, dataSetID, create, content)
 }
 
 // GetContent mocks base method.
@@ -68,16 +68,16 @@ func (mr *MockClientMockRecorder) GetContent(ctx, id interface{}) *gomock.Call {
 }
 
 // List mocks base method.
-func (m *MockClient) List(ctx context.Context, userID, dataSetID string, pagination *page.Pagination) (raw.RawArray, error) {
+func (m *MockClient) List(ctx context.Context, dataSetID string, pagination *page.Pagination) (raw.RawArray, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "List", ctx, userID, dataSetID, pagination)
+	ret := m.ctrl.Call(m, "List", ctx, dataSetID, pagination)
 	ret0, _ := ret[0].(raw.RawArray)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // List indicates an expected call of List.
-func (mr *MockClientMockRecorder) List(ctx, userID, dataSetID, pagination interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) List(ctx, dataSetID, pagination interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*MockClient)(nil).List), ctx, userID, dataSetID, pagination)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*MockClient)(nil).List), ctx, dataSetID, pagination)
 }
