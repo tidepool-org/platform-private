@@ -256,9 +256,9 @@ func (P *GlucosePeriod) Update(bucket *Bucket[*GlucoseBucket, GlucoseBucket]) er
 	}
 
 	// NOTE this works correctly for buckets in forward or backwards order, but not unordered, it must be added with consistent direction
-	// TODO this could use some math with firstData/lastData to work with non-hourly buckets, but today they're hourly.
-	// TODO should this be moved to a generic periods type as a Shared sidecar, days/hours is probably useful to other types
-	// TODO average daily records could also be moved
+	// NOTE this could use some math with firstData/lastData to work with non-hourly buckets, but today they're hourly.
+	// NOTE should this be moved to a generic periods type as a Shared sidecar, days/hours is probably useful to other types
+	// NOTE average daily records could also be moved
 
 	if P.lastCountedDay.IsZero() {
 		P.firstCountedDay = bucket.Time

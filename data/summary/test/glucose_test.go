@@ -70,7 +70,7 @@ var _ = Describe("Glucose", func() {
 			Expect(firstRange.Records).To(Equal(15))
 			Expect(firstRange.Variance).To(Equal(15.0))
 
-			// expect percent untouched, we dont handle percent on add
+			// expect percent untouched, we don't handle percent on add
 			Expect(firstRange.Percent).To(Equal(5.0))
 		})
 
@@ -211,8 +211,7 @@ var _ = Describe("Glucose", func() {
 				Expect(userBucket.Data.VeryHigh.Records).To(Equal(expectedVeryHighRecords))
 				Expect(userBucket.Data.VeryHigh.Minutes).To(Equal(expectedVeryHighMinutes))
 
-				// TODO remove checks for anything but records? we check other stuff in other tests
-				// we should check that total gets variance though
+				// we should check that total gets variance
 			}
 		})
 	})
@@ -344,7 +343,7 @@ var _ = Describe("Glucose", func() {
 			Expect(period.DaysWithData).To(Equal(2))
 		})
 
-		It("Finalize a period", func() {
+		It("Finalize a 1d period", func() {
 			period = types.GlucosePeriod{}
 			buckets := CreateGlucoseBuckets(bucketTime, 24, 12, true)
 
@@ -368,6 +367,96 @@ var _ = Describe("Glucose", func() {
 			Expect(period.AverageDailyRecords).To(Equal(12.0 * 24.0))
 			Expect(period.AverageGlucose).To(Equal(InTargetBloodGlucose))
 			Expect(period.GlucoseManagementIndicator).To(Equal(types.CalculateGMI(InTargetBloodGlucose)))
+
+			// we only validate these are set here, as this requires more specific validation
+			Expect(period.StandardDeviation).ToNot(Equal(0.0))
+			Expect(period.CoefficientOfVariation).ToNot(Equal(0.0))
+		})
+
+		It("Finalize a 7d period", func() {
+			period = types.GlucosePeriod{}
+			buckets := CreateGlucoseBuckets(bucketTime, 24*5, 12, true)
+
+			for i := range buckets {
+				err = period.Update(buckets[i])
+				Expect(err).ToNot(HaveOccurred())
+			}
+
+			period.Finalize(7)
+
+			// data is generated at 100% per range
+			Expect(period.VeryHigh.Percent).To(Equal(1.0))
+			Expect(period.AnyLow.Percent).To(Equal(1.0))
+			Expect(period.AnyHigh.Percent).To(Equal(1.0))
+			Expect(period.Target.Percent).To(Equal(1.0))
+			Expect(period.Low.Percent).To(Equal(1.0))
+			Expect(period.High.Percent).To(Equal(1.0))
+			Expect(period.VeryLow.Percent).To(Equal(1.0))
+			Expect(period.ExtremeHigh.Percent).To(Equal(1.0))
+
+			Expect(period.AverageDailyRecords).To(Equal((12.0 * 24.0) * 5 / 7))
+			Expect(period.AverageGlucose).To(Equal(InTargetBloodGlucose))
+			Expect(period.GlucoseManagementIndicator).To(Equal(types.CalculateGMI(InTargetBloodGlucose)))
+
+			// we only validate these are set here, as this requires more specific validation
+			Expect(period.StandardDeviation).ToNot(Equal(0.0))
+			Expect(period.CoefficientOfVariation).ToNot(Equal(0.0))
+		})
+
+		It("Finalize a 1d period with insufficient data", func() {
+			period = types.GlucosePeriod{}
+			buckets := CreateGlucoseBuckets(bucketTime, 16, 12, true)
+
+			for i := range buckets {
+				err = period.Update(buckets[i])
+				Expect(err).ToNot(HaveOccurred())
+			}
+
+			period.Finalize(1)
+
+			// data is generated at 100% per range
+			Expect(period.VeryHigh.Percent).To(Equal(0.0))
+			Expect(period.AnyLow.Percent).To(Equal(0.0))
+			Expect(period.AnyHigh.Percent).To(Equal(0.0))
+			Expect(period.Target.Percent).To(Equal(0.0))
+			Expect(period.Low.Percent).To(Equal(0.0))
+			Expect(period.High.Percent).To(Equal(0.0))
+			Expect(period.VeryLow.Percent).To(Equal(0.0))
+			Expect(period.ExtremeHigh.Percent).To(Equal(0.0))
+
+			Expect(period.AverageDailyRecords).To(Equal(12.0 * 16.0))
+			Expect(period.AverageGlucose).To(Equal(InTargetBloodGlucose))
+			Expect(period.GlucoseManagementIndicator).To(Equal(0.0))
+
+			// we only validate these are set here, as this requires more specific validation
+			Expect(period.StandardDeviation).ToNot(Equal(0.0))
+			Expect(period.CoefficientOfVariation).ToNot(Equal(0.0))
+		})
+
+		It("Finalize a 7d period with insufficient data", func() {
+			period = types.GlucosePeriod{}
+			buckets := CreateGlucoseBuckets(bucketTime, 23, 12, true)
+
+			for i := range buckets {
+				err = period.Update(buckets[i])
+				Expect(err).ToNot(HaveOccurred())
+			}
+
+			period.Finalize(7)
+
+			// data is generated at 100% per range
+			Expect(period.VeryHigh.Percent).To(Equal(0.0))
+			Expect(period.AnyLow.Percent).To(Equal(0.0))
+			Expect(period.AnyHigh.Percent).To(Equal(0.0))
+			Expect(period.Target.Percent).To(Equal(0.0))
+			Expect(period.Low.Percent).To(Equal(0.0))
+			Expect(period.High.Percent).To(Equal(0.0))
+			Expect(period.VeryLow.Percent).To(Equal(0.0))
+			Expect(period.ExtremeHigh.Percent).To(Equal(0.0))
+
+			Expect(period.AverageDailyRecords).To(Equal(12.0 * 23.0 / 7))
+			Expect(period.AverageGlucose).To(Equal(InTargetBloodGlucose))
+			Expect(period.GlucoseManagementIndicator).To(Equal(0.0))
 
 			// we only validate these are set here, as this requires more specific validation
 			Expect(period.StandardDeviation).ToNot(Equal(0.0))
