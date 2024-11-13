@@ -424,20 +424,26 @@ var _ = Describe("Glucose", func() {
 			err = s.CalculateSummary(ctx, bucketsCursor)
 			Expect(err).ToNot(HaveOccurred())
 
-			// we should have 1d, but not offset 1d
-			Expect(s.TotalHours).To(Equal(24))
 			Expect(s.Periods).To(Not(BeNil()))
 			Expect(s.OffsetPeriods).To(Not(BeNil()))
 
 			Expect(s.Periods["1d"].Total.Records).To(Equal(24))
 			Expect(s.OffsetPeriods["1d"].Total.Records).To(Equal(0))
+
+			Expect(s.Periods["7d"].Total.Records).To(Equal(24))
+			Expect(s.OffsetPeriods["7d"].Total.Records).To(Equal(0))
+
+			Expect(s.Periods["14d"].Total.Records).To(Equal(24))
+			Expect(s.OffsetPeriods["14d"].Total.Records).To(Equal(0))
+
+			Expect(s.Periods["30d"].Total.Records).To(Equal(24))
+			Expect(s.OffsetPeriods["30d"].Total.Records).To(Equal(0))
 		})
 
 		It("CalculateSummary 2d", func() {
 			s := types.GlucoseStats{}
 			s.Init()
 
-			// add another day
 			buckets := CreateGlucoseBuckets(bucketTime, 48, 1, true)
 			bucketsCursor, err := mongo.NewCursorFromDocuments(ConvertToIntArray(buckets), nil, nil)
 			Expect(err).ToNot(HaveOccurred())
@@ -445,19 +451,270 @@ var _ = Describe("Glucose", func() {
 			err = s.CalculateSummary(ctx, bucketsCursor)
 			Expect(err).ToNot(HaveOccurred())
 
-			Expect(s.TotalHours).To(Equal(48))
 			Expect(s.Periods).To(Not(BeNil()))
 			Expect(s.OffsetPeriods).To(Not(BeNil()))
 
 			Expect(s.Periods["1d"].Total.Records).To(Equal(24))
 			Expect(s.OffsetPeriods["1d"].Total.Records).To(Equal(24))
+
+			Expect(s.Periods["7d"].Total.Records).To(Equal(24 * 2))
+			Expect(s.OffsetPeriods["7d"].Total.Records).To(Equal(0))
+
+			Expect(s.Periods["14d"].Total.Records).To(Equal(24 * 2))
+			Expect(s.OffsetPeriods["14d"].Total.Records).To(Equal(0))
+
+			Expect(s.Periods["30d"].Total.Records).To(Equal(24 * 2))
+			Expect(s.OffsetPeriods["30d"].Total.Records).To(Equal(0))
 		})
 
-		It("CalculateDelta", func() {
+		It("CalculateSummary 7d", func() {
 			s := types.GlucoseStats{}
 			s.Init()
 
+			buckets := CreateGlucoseBuckets(bucketTime, 24*7, 1, true)
+			bucketsCursor, err := mongo.NewCursorFromDocuments(ConvertToIntArray(buckets), nil, nil)
+			Expect(err).ToNot(HaveOccurred())
+
+			err = s.CalculateSummary(ctx, bucketsCursor)
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(s.Periods).To(Not(BeNil()))
+			Expect(s.OffsetPeriods).To(Not(BeNil()))
+
+			Expect(s.Periods["1d"].Total.Records).To(Equal(24))
+			Expect(s.OffsetPeriods["1d"].Total.Records).To(Equal(24))
+
+			Expect(s.Periods["7d"].Total.Records).To(Equal(24 * 7))
+			Expect(s.OffsetPeriods["7d"].Total.Records).To(Equal(0))
+
+			Expect(s.Periods["14d"].Total.Records).To(Equal(24 * 7))
+			Expect(s.OffsetPeriods["14d"].Total.Records).To(Equal(0))
+
+			Expect(s.Periods["30d"].Total.Records).To(Equal(24 * 7))
+			Expect(s.OffsetPeriods["30d"].Total.Records).To(Equal(0))
+		})
+
+		It("CalculateSummary 14d", func() {
+			s := types.GlucoseStats{}
+			s.Init()
+
+			buckets := CreateGlucoseBuckets(bucketTime, 24*14, 1, true)
+			bucketsCursor, err := mongo.NewCursorFromDocuments(ConvertToIntArray(buckets), nil, nil)
+			Expect(err).ToNot(HaveOccurred())
+
+			err = s.CalculateSummary(ctx, bucketsCursor)
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(s.Periods).To(Not(BeNil()))
+			Expect(s.OffsetPeriods).To(Not(BeNil()))
+
+			Expect(s.Periods["1d"].Total.Records).To(Equal(24))
+			Expect(s.OffsetPeriods["1d"].Total.Records).To(Equal(24))
+
+			Expect(s.Periods["7d"].Total.Records).To(Equal(24 * 7))
+			Expect(s.OffsetPeriods["7d"].Total.Records).To(Equal(24 * 7))
+
+			Expect(s.Periods["14d"].Total.Records).To(Equal(24 * 14))
+			Expect(s.OffsetPeriods["14d"].Total.Records).To(Equal(0))
+
+			Expect(s.Periods["30d"].Total.Records).To(Equal(24 * 14))
+			Expect(s.OffsetPeriods["30d"].Total.Records).To(Equal(0))
+		})
+
+		It("CalculateSummary 28d", func() {
+			s := types.GlucoseStats{}
+			s.Init()
+
+			buckets := CreateGlucoseBuckets(bucketTime, 24*28, 1, true)
+			bucketsCursor, err := mongo.NewCursorFromDocuments(ConvertToIntArray(buckets), nil, nil)
+			Expect(err).ToNot(HaveOccurred())
+
+			err = s.CalculateSummary(ctx, bucketsCursor)
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(s.Periods).To(Not(BeNil()))
+			Expect(s.OffsetPeriods).To(Not(BeNil()))
+
+			Expect(s.Periods["1d"].Total.Records).To(Equal(24))
+			Expect(s.OffsetPeriods["1d"].Total.Records).To(Equal(24))
+
+			Expect(s.Periods["7d"].Total.Records).To(Equal(24 * 7))
+			Expect(s.OffsetPeriods["7d"].Total.Records).To(Equal(24 * 7))
+
+			Expect(s.Periods["14d"].Total.Records).To(Equal(24 * 14))
+			Expect(s.OffsetPeriods["14d"].Total.Records).To(Equal(24 * 14))
+
+			Expect(s.Periods["30d"].Total.Records).To(Equal(24 * 28))
+			Expect(s.OffsetPeriods["30d"].Total.Records).To(Equal(0))
+		})
+
+		It("CalculateSummary 30d", func() {
+			s := types.GlucoseStats{}
+			s.Init()
+
+			buckets := CreateGlucoseBuckets(bucketTime, 24*30, 1, true)
+			bucketsCursor, err := mongo.NewCursorFromDocuments(ConvertToIntArray(buckets), nil, nil)
+			Expect(err).ToNot(HaveOccurred())
+
+			err = s.CalculateSummary(ctx, bucketsCursor)
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(s.Periods).To(Not(BeNil()))
+			Expect(s.OffsetPeriods).To(Not(BeNil()))
+
+			Expect(s.Periods["1d"].Total.Records).To(Equal(24))
+			Expect(s.OffsetPeriods["1d"].Total.Records).To(Equal(24))
+
+			Expect(s.Periods["7d"].Total.Records).To(Equal(24 * 7))
+			Expect(s.OffsetPeriods["7d"].Total.Records).To(Equal(24 * 7))
+
+			Expect(s.Periods["14d"].Total.Records).To(Equal(24 * 14))
+			Expect(s.OffsetPeriods["14d"].Total.Records).To(Equal(24 * 14))
+
+			Expect(s.Periods["30d"].Total.Records).To(Equal(24 * 30))
+			Expect(s.OffsetPeriods["30d"].Total.Records).To(Equal(0))
+		})
+
+		It("CalculateSummary 60d", func() {
+			s := types.GlucoseStats{}
+			s.Init()
+
+			buckets := CreateGlucoseBuckets(bucketTime, 24*60, 1, true)
+			bucketsCursor, err := mongo.NewCursorFromDocuments(ConvertToIntArray(buckets), nil, nil)
+			Expect(err).ToNot(HaveOccurred())
+
+			err = s.CalculateSummary(ctx, bucketsCursor)
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(s.Periods).To(Not(BeNil()))
+			Expect(s.OffsetPeriods).To(Not(BeNil()))
+
+			Expect(s.Periods["1d"].Total.Records).To(Equal(24))
+			Expect(s.OffsetPeriods["1d"].Total.Records).To(Equal(24))
+
+			Expect(s.Periods["7d"].Total.Records).To(Equal(24 * 7))
+			Expect(s.OffsetPeriods["7d"].Total.Records).To(Equal(24 * 7))
+
+			Expect(s.Periods["14d"].Total.Records).To(Equal(24 * 14))
+			Expect(s.OffsetPeriods["14d"].Total.Records).To(Equal(24 * 14))
+
+			Expect(s.Periods["30d"].Total.Records).To(Equal(24 * 30))
+			Expect(s.OffsetPeriods["30d"].Total.Records).To(Equal(24 * 30))
+		})
+
+		It("CalculateSummary 61d", func() {
+			s := types.GlucoseStats{}
+			s.Init()
+
+			buckets := CreateGlucoseBuckets(bucketTime, 24*61, 1, true)
+			bucketsCursor, err := mongo.NewCursorFromDocuments(ConvertToIntArray(buckets), nil, nil)
+			Expect(err).ToNot(HaveOccurred())
+
+			err = s.CalculateSummary(ctx, bucketsCursor)
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(s.Periods).To(Not(BeNil()))
+			Expect(s.OffsetPeriods).To(Not(BeNil()))
+
+			Expect(s.Periods["1d"].Total.Records).To(Equal(24))
+			Expect(s.OffsetPeriods["1d"].Total.Records).To(Equal(24))
+
+			Expect(s.Periods["7d"].Total.Records).To(Equal(24 * 7))
+			Expect(s.OffsetPeriods["7d"].Total.Records).To(Equal(24 * 7))
+
+			Expect(s.Periods["14d"].Total.Records).To(Equal(24 * 14))
+			Expect(s.OffsetPeriods["14d"].Total.Records).To(Equal(24 * 14))
+
+			Expect(s.Periods["30d"].Total.Records).To(Equal(24 * 30))
+			Expect(s.OffsetPeriods["30d"].Total.Records).To(Equal(24 * 30))
+		})
+
+		It("CalculateDelta 1d", func() {
+			s := types.GlucoseStats{}
+			s.Init()
+
+			bucketsOne := CreateGlucoseBuckets(bucketTime, 24, 1, true)
+			bucketsTwo := CreateGlucoseBuckets(bucketTime.AddDate(0, 0, -1), 24, 2, true)
+			buckets := append(bucketsOne, bucketsTwo...)
+			bucketsCursor, err := mongo.NewCursorFromDocuments(ConvertToIntArray(buckets), nil, nil)
+			Expect(err).ToNot(HaveOccurred())
+
+			err = s.CalculateSummary(ctx, bucketsCursor)
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(s.Periods["1d"].Delta).To(BeNil())
+			Expect(s.OffsetPeriods["1d"].Delta).To(BeNil())
+
 			s.CalculateDelta()
+
+			Expect(s.Periods["1d"].Delta.Total.Records).To(Equal(-24))
+			Expect(s.OffsetPeriods["1d"].Delta.Total.Records).To(Equal(24))
+		})
+
+		It("CalculateDelta 7d", func() {
+			s := types.GlucoseStats{}
+			s.Init()
+
+			bucketsOne := CreateGlucoseBuckets(bucketTime, 24*7, 1, true)
+			bucketsTwo := CreateGlucoseBuckets(bucketTime.AddDate(0, 0, -7), 24*7, 2, true)
+			buckets := append(bucketsOne, bucketsTwo...)
+			bucketsCursor, err := mongo.NewCursorFromDocuments(ConvertToIntArray(buckets), nil, nil)
+			Expect(err).ToNot(HaveOccurred())
+
+			err = s.CalculateSummary(ctx, bucketsCursor)
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(s.Periods["7d"].Delta).To(BeNil())
+			Expect(s.OffsetPeriods["7d"].Delta).To(BeNil())
+
+			s.CalculateDelta()
+
+			Expect(s.Periods["7d"].Delta.Total.Records).To(Equal(-24 * 7))
+			Expect(s.OffsetPeriods["7d"].Delta.Total.Records).To(Equal(24 * 7))
+		})
+
+		It("CalculateDelta 14d", func() {
+			s := types.GlucoseStats{}
+			s.Init()
+
+			bucketsOne := CreateGlucoseBuckets(bucketTime, 24*14, 1, true)
+			bucketsTwo := CreateGlucoseBuckets(bucketTime.AddDate(0, 0, -14), 24*14, 2, true)
+			buckets := append(bucketsOne, bucketsTwo...)
+			bucketsCursor, err := mongo.NewCursorFromDocuments(ConvertToIntArray(buckets), nil, nil)
+			Expect(err).ToNot(HaveOccurred())
+
+			err = s.CalculateSummary(ctx, bucketsCursor)
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(s.Periods["14d"].Delta).To(BeNil())
+			Expect(s.OffsetPeriods["14d"].Delta).To(BeNil())
+
+			s.CalculateDelta()
+
+			Expect(s.Periods["14d"].Delta.Total.Records).To(Equal(-24 * 14))
+			Expect(s.OffsetPeriods["14d"].Delta.Total.Records).To(Equal(24 * 14))
+		})
+
+		It("CalculateDelta 30d", func() {
+			s := types.GlucoseStats{}
+			s.Init()
+
+			bucketsOne := CreateGlucoseBuckets(bucketTime, 24*30, 1, true)
+			bucketsTwo := CreateGlucoseBuckets(bucketTime.AddDate(0, 0, -30), 24*30, 2, true)
+			buckets := append(bucketsOne, bucketsTwo...)
+			bucketsCursor, err := mongo.NewCursorFromDocuments(ConvertToIntArray(buckets), nil, nil)
+			Expect(err).ToNot(HaveOccurred())
+
+			err = s.CalculateSummary(ctx, bucketsCursor)
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(s.Periods["30d"].Delta).To(BeNil())
+			Expect(s.OffsetPeriods["30d"].Delta).To(BeNil())
+
+			s.CalculateDelta()
+
+			Expect(s.Periods["30d"].Delta.Total.Records).To(Equal(-24 * 30))
+			Expect(s.OffsetPeriods["30d"].Delta.Total.Records).To(Equal(24 * 30))
 		})
 	})
 })

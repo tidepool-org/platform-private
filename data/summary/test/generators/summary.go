@@ -94,7 +94,6 @@ func RandomCGMSummary(userId string) *types.Summary[*types.CGMStats, *types.Gluc
 			GlucoseStats: types.GlucoseStats{
 				Periods:       types.GlucosePeriods{},
 				OffsetPeriods: types.GlucosePeriods{},
-				TotalHours:    test.RandomIntFromRange(1, 1440),
 			},
 		},
 	}
@@ -121,7 +120,6 @@ func RandomBGMSummary(userId string) *types.Summary[*types.BGMStats, *types.Gluc
 			GlucoseStats: types.GlucoseStats{
 				Periods:       types.GlucosePeriods{},
 				OffsetPeriods: types.GlucosePeriods{},
-				TotalHours:    test.RandomIntFromRange(1, 1440),
 			},
 		},
 	}

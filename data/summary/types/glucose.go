@@ -19,7 +19,6 @@ type GlucosePeriods map[string]*GlucosePeriod
 type GlucoseStats struct {
 	Periods       GlucosePeriods `json:"periods,omitempty" bson:"periods,omitempty"`
 	OffsetPeriods GlucosePeriods `json:"offsetPeriods,omitempty" bson:"offsetPeriods,omitempty"`
-	TotalHours    int            `json:"totalHours,omitempty" bson:"totalHours,omitempty"`
 }
 
 type Range struct {
@@ -327,7 +326,6 @@ func (P *GlucosePeriod) Finalize(days int) {
 func (s *GlucoseStats) Init() {
 	s.Periods = make(map[string]*GlucosePeriod)
 	s.OffsetPeriods = make(map[string]*GlucosePeriod)
-	s.TotalHours = 0
 }
 
 func (s *GlucoseStats) Update(ctx context.Context, shared SummaryShared, bucketsFetcher BucketFetcher[*GlucoseBucket, GlucoseBucket], cursor fetcher.DeviceDataCursor) error {
@@ -392,11 +390,11 @@ func (s *GlucoseStats) CalculateSummary(ctx context.Context, buckets fetcher.Any
 	nextOffsetStopPoint := 0
 	totalStats := GlucosePeriod{}
 	totalOffsetStats := GlucosePeriod{}
+	bucket := &Bucket[*GlucoseBucket, GlucoseBucket]{}
+
 	var err error
 	var stopPoints []time.Time
 	var offsetStopPoints []time.Time
-
-	bucket := &Bucket[*GlucoseBucket, GlucoseBucket]{}
 
 	for buckets.Next(ctx) {
 		if err = buckets.Decode(bucket); err != nil {
@@ -412,15 +410,19 @@ func (s *GlucoseStats) CalculateSummary(ctx context.Context, buckets fetcher.Any
 			panic("bucket exists with 0 records")
 		}
 
-		s.TotalHours++
+		if len(stopPoints) > nextStopPoint && bucket.Time.Compare(stopPoints[nextStopPoint]) <= 0 {
+			s.CalculatePeriod(periodLengths[nextStopPoint], false, totalStats)
+			nextStopPoint++
+		}
+
+		if len(offsetStopPoints) > nextOffsetStopPoint && bucket.Time.Compare(offsetStopPoints[nextOffsetStopPoint]) <= 0 {
+			s.CalculatePeriod(periodLengths[nextOffsetStopPoint], true, totalOffsetStats)
+			nextOffsetStopPoint++
+			totalOffsetStats = GlucosePeriod{}
+		}
 
 		// only count primary stats when the next stop point is a real period
 		if len(stopPoints) > nextStopPoint {
-			if bucket.Time.Compare(stopPoints[nextStopPoint]) <= 0 {
-				s.CalculatePeriod(periodLengths[nextStopPoint], false, totalStats)
-				nextStopPoint++
-			}
-
 			err = totalStats.Update(bucket)
 			if err != nil {
 				return err
@@ -428,13 +430,7 @@ func (s *GlucoseStats) CalculateSummary(ctx context.Context, buckets fetcher.Any
 		}
 
 		// only add to offset stats when primary stop point is ahead of offset
-		if nextStopPoint > nextOffsetStopPoint && len(stopPoints) > nextOffsetStopPoint {
-			if bucket.Time.Compare(offsetStopPoints[nextOffsetStopPoint]) <= 0 {
-				s.CalculatePeriod(periodLengths[nextOffsetStopPoint], true, totalOffsetStats)
-				nextOffsetStopPoint++
-				totalOffsetStats = GlucosePeriod{}
-			}
-
+		if nextStopPoint > nextOffsetStopPoint && len(offsetStopPoints) > nextOffsetStopPoint {
 			err = totalOffsetStats.Update(bucket)
 			if err != nil {
 				return err
@@ -446,7 +442,7 @@ func (s *GlucoseStats) CalculateSummary(ctx context.Context, buckets fetcher.Any
 	for i := nextStopPoint; i < len(stopPoints); i++ {
 		s.CalculatePeriod(periodLengths[i], false, totalStats)
 	}
-	for i := nextOffsetStopPoint; i < len(stopPoints); i++ {
+	for i := nextOffsetStopPoint; i < len(offsetStopPoints); i++ {
 		s.CalculatePeriod(periodLengths[i], true, totalOffsetStats)
 		totalOffsetStats = GlucosePeriod{}
 	}
