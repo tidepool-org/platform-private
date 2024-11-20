@@ -40,10 +40,14 @@ func (R *Range) Add(new *Range) {
 }
 
 func (R *Range) Update(value float64, duration int, total bool) {
-	// this must occur before the counters below as the pre-increment counters are used during calc
 	if total {
-		R.Variance = R.CalculateVariance(value, float64(duration))
-		R.Glucose += value * float64(duration)
+		// this must occur before the counters below as the pre-increment counters are used during calc
+		if duration > 0 {
+			R.Variance = R.CalculateVariance(value, float64(duration))
+			R.Glucose += value * float64(duration)
+		} else {
+			R.Glucose += value
+		}
 	}
 
 	R.Minutes += duration
@@ -192,7 +196,7 @@ func (B *GlucoseBucket) Update(r data.Datum, shared *BucketShared) error {
 		return fmt.Errorf("record for %s calculation is of invald type %s", shared.Type, record.Type)
 	}
 
-	// if this is bgm data, this will return 1
+	// if this is bgm data, this will return 0
 	duration := GetDuration(record)
 
 	// if we have cgm data, we care about blackout periods
@@ -468,8 +472,8 @@ func (s *GlucoseStats) CalculateDelta() {
 		BinDelta(&s.Periods[k].AnyHigh, &s.OffsetPeriods[k].AnyHigh, &s.Periods[k].Delta.AnyHigh, &s.OffsetPeriods[k].Delta.AnyHigh)
 
 		Delta(&s.Periods[k].AverageGlucose, &s.OffsetPeriods[k].AverageGlucose, &s.Periods[k].Delta.AverageGlucose, &s.OffsetPeriods[k].Delta.AverageGlucose)
-		Delta(&s.Periods[k].GlucoseManagementIndicator, &s.OffsetPeriods[k].GlucoseManagementIndicator, &s.OffsetPeriods[k].Delta.GlucoseManagementIndicator, &s.Periods[k].Delta.GlucoseManagementIndicator)
-		Delta(&s.Periods[k].AverageDailyRecords, &s.OffsetPeriods[k].AverageDailyRecords, &s.OffsetPeriods[k].Delta.AverageDailyRecords, &s.Periods[k].Delta.AverageDailyRecords)
+		Delta(&s.Periods[k].GlucoseManagementIndicator, &s.OffsetPeriods[k].GlucoseManagementIndicator, &s.Periods[k].Delta.GlucoseManagementIndicator, &s.OffsetPeriods[k].Delta.GlucoseManagementIndicator)
+		Delta(&s.Periods[k].AverageDailyRecords, &s.OffsetPeriods[k].AverageDailyRecords, &s.Periods[k].Delta.AverageDailyRecords, &s.OffsetPeriods[k].Delta.AverageDailyRecords)
 		Delta(&s.Periods[k].StandardDeviation, &s.OffsetPeriods[k].StandardDeviation, &s.Periods[k].Delta.StandardDeviation, &s.OffsetPeriods[k].Delta.StandardDeviation)
 		Delta(&s.Periods[k].CoefficientOfVariation, &s.OffsetPeriods[k].CoefficientOfVariation, &s.Periods[k].Delta.CoefficientOfVariation, &s.OffsetPeriods[k].Delta.CoefficientOfVariation)
 		Delta(&s.Periods[k].DaysWithData, &s.OffsetPeriods[k].DaysWithData, &s.Periods[k].Delta.DaysWithData, &s.OffsetPeriods[k].Delta.DaysWithData)
