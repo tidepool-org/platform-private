@@ -1,10 +1,11 @@
 package generators
 
 import (
-	"github.com/tidepool-org/platform/data/summary/types"
 	"math"
 	"math/rand/v2"
 	"time"
+
+	"github.com/tidepool-org/platform/data/summary/types"
 
 	"github.com/tidepool-org/platform/data"
 	"github.com/tidepool-org/platform/data/test"

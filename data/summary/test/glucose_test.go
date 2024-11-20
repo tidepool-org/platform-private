@@ -3,9 +3,13 @@ package test_test
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/google/go-cmp/cmp/cmpopts"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.mongodb.org/mongo-driver/mongo"
+
 	"github.com/tidepool-org/platform/data"
 	. "github.com/tidepool-org/platform/data/summary/test/generators"
 	"github.com/tidepool-org/platform/data/summary/types"
@@ -13,8 +17,6 @@ import (
 	"github.com/tidepool-org/platform/data/types/blood/glucose/selfmonitored"
 	"github.com/tidepool-org/platform/log"
 	logTest "github.com/tidepool-org/platform/log/test"
-	"go.mongodb.org/mongo-driver/mongo"
-	"time"
 )
 
 var _ = Describe("Glucose", func() {
